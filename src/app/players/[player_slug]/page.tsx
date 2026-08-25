@@ -65,13 +65,45 @@ export default async function PlayerProfilePage({
     throw new Error(performanceError.message);
   }
 
+  const { data: teams, error: teamsError } = await supabase
+    .from("teams")
+    .select("team_id, team_name, display_order")
+    .order("display_order", { ascending: true });
+
+  if (teamsError) {
+    throw new Error(teamsError.message);
+  }
+
   const rows = performances ?? [];
 
   // -------------------------
   // MATCHES
   // -------------------------
 
-  const matches = new Set(rows.map((row) => row.source_match_id)).size;
+  const matches = new Set(
+    rows.map((row) => row.source_match_id),
+  ).size;
+
+  // -------------------------
+  // TEAM APPEARANCES
+  // -------------------------
+
+  const teamAppearances =
+    teams
+      ?.map((team) => {
+        const appearances = new Set(
+          rows
+            .filter((row) => row.team_id === team.team_id)
+            .map((row) => row.source_match_id),
+        ).size;
+
+        return {
+          team_id: team.team_id,
+          team_name: team.team_name,
+          appearances,
+        };
+      })
+      .filter((team) => team.appearances > 0) ?? [];
 
   // -------------------------
   // BATTING
@@ -174,7 +206,8 @@ export default async function PlayerProfilePage({
     wickets > 0 ? bowlingBalls / wickets : null;
 
   const bestSpellRow = [...bowlingInnings].sort((a, b) => {
-    const wicketDifference = (b.wickets ?? 0) - (a.wickets ?? 0);
+    const wicketDifference =
+      (b.wickets ?? 0) - (a.wickets ?? 0);
 
     if (wicketDifference !== 0) return wicketDifference;
 
@@ -230,8 +263,38 @@ export default async function PlayerProfilePage({
           </div>
         </div>
 
+        {/* Team Appearances */}
+        {teamAppearances.length > 0 && (
+          <div className="py-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
+              Teams
+            </p>
+
+            <h2 className="mt-2 text-3xl font-black uppercase">
+              Team Appearances
+            </h2>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {teamAppearances.map((team) => (
+                <div
+                  key={team.team_id}
+                  className="rounded-xl border border-white/10 bg-[#0b1220] p-6"
+                >
+                  <p className="text-sm uppercase tracking-wide text-slate-400">
+                    {team.team_name}
+                  </p>
+
+                  <p className="mt-3 text-4xl font-black text-white">
+                    {team.appearances}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Batting */}
-        <div className="py-12">
+        <div className="border-t border-white/10 py-12">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
             Batting
           </p>
@@ -318,7 +381,9 @@ export default async function PlayerProfilePage({
               ],
               [
                 "Economy",
-                economy !== null ? formatNumber(economy) : "—",
+                economy !== null
+                  ? formatNumber(economy)
+                  : "—",
               ],
             ].map(([label, value]) => (
               <div
