@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -10,6 +11,16 @@ function ballsToOvers(balls: number) {
   const remainingBalls = balls % 6;
 
   return `${overs}.${remainingBalls}`;
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 export default async function PlayerProfilePage({
@@ -165,7 +176,9 @@ export default async function PlayerProfilePage({
   })[0];
 
   const highestScore = highestInnings
-    ? `${highestInnings.runs ?? 0}${highestInnings.is_not_out ? "*" : ""}`
+    ? `${highestInnings.runs ?? 0}${
+        highestInnings.is_not_out ? "*" : ""
+      }`
     : "—";
 
   // -------------------------
@@ -215,7 +228,9 @@ export default async function PlayerProfilePage({
   })[0];
 
   const bestSpell = bestSpellRow
-    ? `${bestSpellRow.wickets ?? 0}/${bestSpellRow.runs_conceded ?? 0}`
+    ? `${bestSpellRow.wickets ?? 0}/${
+        bestSpellRow.runs_conceded ?? 0
+      }`
     : "—";
 
   // -------------------------
@@ -237,228 +252,220 @@ export default async function PlayerProfilePage({
     0,
   );
 
+  const initials = getInitials(player.player_name);
+
   return (
-    <section className="px-6 py-16">
+    <section className="px-4 py-8 sm:px-6 lg:py-10">
       <div className="mx-auto max-w-7xl">
-        {/* Player header */}
-        <div className="border-b border-white/10 pb-10">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-            2026 Player Profile
-          </p>
+        {/* Back */}
+        <Link
+          href="/players"
+          className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+        >
+          <span aria-hidden="true">←</span>
+          Back to players
+        </Link>
 
-          <h1 className="mt-3 text-4xl font-black uppercase sm:text-6xl">
-            {player.player_name}
-          </h1>
+        {/* Profile Hero */}
+        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#101d32] via-[#0c1728] to-[#08111f]">
+          <div className="grid min-h-[280px] md:grid-cols-[260px_1fr] lg:grid-cols-[290px_1fr]">
+            {/* Portrait / future player photo area */}
+            <div className="relative flex min-h-[210px] items-center justify-center border-b border-white/10 bg-white/[0.02] md:min-h-0 md:border-b-0 md:border-r">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.08),transparent_65%)]" />
 
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            {profile?.role && (
-              <span className="rounded-full border border-blue-400/20 bg-blue-400/10 px-4 py-2 text-sm font-semibold text-blue-300">
-                {profile.role}
-              </span>
-            )}
+              <div className="relative flex h-36 w-36 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#101827] shadow-2xl sm:h-40 sm:w-40">
+                <span className="text-5xl font-black tracking-tight text-[#d4af37] sm:text-6xl">
+                  {initials}
+                </span>
+              </div>
+            </div>
 
-            <span className="rounded-full border border-white/10 bg-[#0b1220] px-4 py-2 text-sm text-slate-300">
-              {matches} {matches === 1 ? "Match" : "Matches"}
-            </span>
+            {/* Player identity */}
+            <div className="flex items-center px-6 py-7 sm:px-8 lg:px-10">
+              <div className="w-full">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
+                  2026 Player Profile
+                </p>
+
+                <h1 className="mt-3 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl lg:text-4xl">
+                  {player.player_name}
+                </h1>
+
+                {profile?.role && (
+                  <p className="mt-2 text-sm font-medium text-blue-300">
+                    {profile.role}
+                  </p>
+                )}
+
+                {teamAppearances.length > 0 && (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {teamAppearances.map((team) => (
+                      <div
+                        key={team.team_id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#d4af37]/25 bg-[#d4af37]/5 px-3 py-2"
+                      >
+                        <span className="text-xs font-semibold uppercase tracking-wide text-[#d4af37]">
+                          {team.team_name}
+                        </span>
+
+                        <span className="rounded bg-white/5 px-2 py-0.5 text-xs font-bold text-white">
+                          {team.appearances}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+                  <span className="text-lg font-bold text-white">
+                    {matches}
+                  </span>
+                  <span>{matches === 1 ? "match" : "matches"}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Team Appearances */}
-        {teamAppearances.length > 0 && (
-          <div className="py-12">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-              Teams
-            </p>
+        {/* Stats Overview */}
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {/* Batting */}
+          <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                Batting
+              </p>
 
-            <h2 className="mt-2 text-3xl font-black uppercase">
-              Team Appearances
-            </h2>
+              <h2 className="mt-1 text-lg font-black uppercase text-white">
+                2026 Batting
+              </h2>
+            </div>
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {teamAppearances.map((team) => (
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+              {[
+                ["Runs", runs],
+                ["Innings", innings],
+                [
+                  "Average",
+                  battingAverage !== null
+                    ? formatNumber(battingAverage)
+                    : "—",
+                ],
+                [
+                  "Strike Rate",
+                  battingStrikeRate !== null
+                    ? formatNumber(battingStrikeRate)
+                    : "—",
+                ],
+                ["Highest", highestScore],
+                ["Not Outs", notOuts],
+                ["50s / 100s", `${fifties} / ${hundreds}`],
+                ["4s / 6s", `${fours} / ${sixes}`],
+              ].map(([label, value]) => (
                 <div
-                  key={team.team_id}
-                  className="rounded-xl border border-white/10 bg-[#0b1220] p-6"
+                  key={label}
+                  className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
                 >
-                  <p className="text-sm uppercase tracking-wide text-slate-400">
-                    {team.team_name}
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
+                    {label}
                   </p>
 
-                  <p className="mt-3 text-4xl font-black text-white">
-                    {team.appearances}
+                  <p className="mt-2 text-xl font-black text-white">
+                    {value}
                   </p>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          </section>
 
-        {/* Batting */}
-        <div className="border-t border-white/10 py-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-            Batting
-          </p>
+          {/* Bowling */}
+          <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                Bowling
+              </p>
 
-          <h2 className="mt-2 text-3xl font-black uppercase">
-            2026 Batting
-          </h2>
+              <h2 className="mt-1 text-lg font-black uppercase text-white">
+                2026 Bowling
+              </h2>
+            </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Runs", runs],
-              ["Innings", innings],
-              [
-                "Average",
-                battingAverage !== null
-                  ? formatNumber(battingAverage)
-                  : "—",
-              ],
-              [
-                "Strike Rate",
-                battingStrikeRate !== null
-                  ? formatNumber(battingStrikeRate)
-                  : "—",
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-[#0b1220] p-6"
-              >
-                <p className="text-sm uppercase tracking-wide text-slate-400">
-                  {label}
-                </p>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+              {[
+                ["Wickets", wickets],
+                ["Innings", bowlInnings],
+                ["Overs", ballsToOvers(bowlingBalls)],
+                [
+                  "Average",
+                  bowlingAverage !== null
+                    ? formatNumber(bowlingAverage)
+                    : "—",
+                ],
+                [
+                  "Economy",
+                  economy !== null
+                    ? formatNumber(economy)
+                    : "—",
+                ],
+                [
+                  "Strike Rate",
+                  bowlingStrikeRate !== null
+                    ? formatNumber(bowlingStrikeRate)
+                    : "—",
+                ],
+                ["Best Spell", bestSpell],
+                ["Maidens", maidens],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
+                    {label}
+                  </p>
 
-                <p className="mt-3 text-4xl font-black text-white">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
+                  <p className="mt-2 text-xl font-black text-white">
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              ["Highest Score", highestScore],
-              ["Not Outs", notOuts],
-              ["50s", fifties],
-              ["100s", hundreds],
-              ["4s / 6s", `${fours} / ${sixes}`],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-[#08101d] p-5"
-              >
-                <p className="text-xs uppercase tracking-wide text-slate-500">
-                  {label}
-                </p>
+          {/* Fielding */}
+          <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                Fielding
+              </p>
 
-                <p className="mt-2 text-2xl font-bold text-white">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+              <h2 className="mt-1 text-lg font-black uppercase text-white">
+                2026 Fielding
+              </h2>
+            </div>
 
-        {/* Bowling */}
-        <div className="border-t border-white/10 py-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-            Bowling
-          </p>
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-1 xl:grid-cols-2">
+              {[
+                ["Catches", catches],
+                ["Stumpings", stumpings],
+                ["Run Outs", runOuts],
+                ["Total", catches + stumpings + runOuts],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
+                    {label}
+                  </p>
 
-          <h2 className="mt-2 text-3xl font-black uppercase">
-            2026 Bowling
-          </h2>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Wickets", wickets],
-              ["Bowling Innings", bowlInnings],
-              [
-                "Average",
-                bowlingAverage !== null
-                  ? formatNumber(bowlingAverage)
-                  : "—",
-              ],
-              [
-                "Economy",
-                economy !== null
-                  ? formatNumber(economy)
-                  : "—",
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-[#0b1220] p-6"
-              >
-                <p className="text-sm uppercase tracking-wide text-slate-400">
-                  {label}
-                </p>
-
-                <p className="mt-3 text-4xl font-black text-white">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Overs", ballsToOvers(bowlingBalls)],
-              ["Maidens", maidens],
-              ["Best Spell", bestSpell],
-              [
-                "Strike Rate",
-                bowlingStrikeRate !== null
-                  ? formatNumber(bowlingStrikeRate)
-                  : "—",
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-[#08101d] p-5"
-              >
-                <p className="text-xs uppercase tracking-wide text-slate-500">
-                  {label}
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-white">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Fielding */}
-        <div className="border-t border-white/10 py-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-            Fielding
-          </p>
-
-          <h2 className="mt-2 text-3xl font-black uppercase">
-            2026 Fielding
-          </h2>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {[
-              ["Catches", catches],
-              ["Stumpings", stumpings],
-              ["Run Outs", runOuts],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-[#0b1220] p-6"
-              >
-                <p className="text-sm uppercase tracking-wide text-slate-400">
-                  {label}
-                </p>
-
-                <p className="mt-3 text-4xl font-black text-white">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
+                  <p className="mt-2 text-xl font-black text-white">
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </section>
