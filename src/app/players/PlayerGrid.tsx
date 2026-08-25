@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type Player = {
@@ -43,29 +44,40 @@ export default function PlayerGrid({
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {filteredPlayers.map((player) => (
-          <div
-            key={player.player_id}
-            className="group rounded-xl border border-white/10 bg-[#0b1220] p-5 transition hover:border-[#d4af37]/40 hover:bg-[#0d1626]"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#111a2a] text-sm font-black text-[#d4af37]">
-                {player.player_name
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
+        {filteredPlayers.map((player) => {
+          const href = player.player_slug
+            ? `/players/${player.player_slug}`
+            : "#";
 
-              <div className="min-w-0">
-                <p className="truncate text-lg font-bold text-white">
-                  {player.player_name}
-                </p>
+          return (
+            <Link
+              key={player.player_id}
+              href={href}
+              className={`group rounded-xl border border-white/10 bg-[#0b1220] p-5 transition ${
+                player.player_slug
+                  ? "hover:border-[#d4af37]/40 hover:bg-[#0d1626]"
+                  : "pointer-events-none opacity-60"
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#111a2a] text-sm font-black text-[#d4af37]">
+                  {player.player_name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-bold text-white">
+                    {player.player_name}
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            </Link>
+          );
+        })}
       </div>
 
       {filteredPlayers.length === 0 && (
