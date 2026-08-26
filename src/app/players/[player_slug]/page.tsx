@@ -467,6 +467,19 @@ export default async function PlayerProfilePage({
       );
     });
 
+  // -------------------------
+  // SEASON OVERVIEW LAYOUT
+  // -------------------------
+
+  const hasSeasonBatting = innings > 0;
+  const hasSeasonBowling = bowlInnings > 0;
+
+  const seasonOverviewCount = [
+    hasSeasonBatting,
+    hasSeasonBowling,
+    true, // Fielding always remains visible
+  ].filter(Boolean).length;
+
   const initials = getInitials(player.player_name);
 
   return (
@@ -545,109 +558,121 @@ export default async function PlayerProfilePage({
         </div>
 
         {/* Stats Overview */}
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <div
+          className={`mt-5 grid gap-4 ${
+            seasonOverviewCount === 1
+              ? "grid-cols-1"
+              : seasonOverviewCount === 2
+                ? "lg:grid-cols-2"
+                : "lg:grid-cols-3"
+          }`}
+        >
           {/* Batting */}
-          <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
-                Batting
-              </p>
+          {hasSeasonBatting && (
+            <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                  Batting
+                </p>
 
-              <h2 className="mt-1 text-lg font-black uppercase text-white">
-                2026 Batting
-              </h2>
-            </div>
+                <h2 className="mt-1 text-lg font-black uppercase text-white">
+                  2026 Batting
+                </h2>
+              </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-              {[
-                ["Runs", runs],
-                ["Innings", innings],
-                [
-                  "Average",
-                  battingAverage !== null
-                    ? formatNumber(battingAverage)
-                    : "—",
-                ],
-                [
-                  "Strike Rate",
-                  battingStrikeRate !== null
-                    ? formatNumber(battingStrikeRate)
-                    : "—",
-                ],
-                ["Highest", highestScore],
-                ["Not Outs", notOuts],
-                ["50s / 100s", `${fifties} / ${hundreds}`],
-                ["4s / 6s", `${fours} / ${sixes}`],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
-                    {label}
-                  </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["Runs", runs],
+                  ["Innings", innings],
+                  [
+                    "Average",
+                    battingAverage !== null
+                      ? formatNumber(battingAverage)
+                      : "—",
+                  ],
+                  [
+                    "Strike Rate",
+                    battingStrikeRate !== null
+                      ? formatNumber(battingStrikeRate)
+                      : "—",
+                  ],
+                  ["Highest", highestScore],
+                  ["Not Outs", notOuts],
+                  ["50s / 100s", `${fifties} / ${hundreds}`],
+                  ["4s / 6s", `${fours} / ${sixes}`],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
+                      {label}
+                    </p>
 
-                  <p className="mt-2 text-xl font-black text-white">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+                    <p className="mt-2 text-xl font-black text-white">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Bowling */}
-          <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
-                Bowling
-              </p>
+          {hasSeasonBowling && (
+            <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                  Bowling
+                </p>
 
-              <h2 className="mt-1 text-lg font-black uppercase text-white">
-                2026 Bowling
-              </h2>
-            </div>
+                <h2 className="mt-1 text-lg font-black uppercase text-white">
+                  2026 Bowling
+                </h2>
+              </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-              {[
-                ["Wickets", wickets],
-                ["Innings", bowlInnings],
-                ["Overs", ballsToOvers(bowlingBalls)],
-                [
-                  "Average",
-                  bowlingAverage !== null
-                    ? formatNumber(bowlingAverage)
-                    : "—",
-                ],
-                [
-                  "Economy",
-                  economy !== null
-                    ? formatNumber(economy)
-                    : "—",
-                ],
-                [
-                  "Strike Rate",
-                  bowlingStrikeRate !== null
-                    ? formatNumber(bowlingStrikeRate)
-                    : "—",
-                ],
-                ["Best Spell", bestSpell],
-                ["Maidens", maidens],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
-                    {label}
-                  </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["Wickets", wickets],
+                  ["Innings", bowlInnings],
+                  ["Overs", ballsToOvers(bowlingBalls)],
+                  [
+                    "Average",
+                    bowlingAverage !== null
+                      ? formatNumber(bowlingAverage)
+                      : "—",
+                  ],
+                  [
+                    "Economy",
+                    economy !== null
+                      ? formatNumber(economy)
+                      : "—",
+                  ],
+                  [
+                    "Strike Rate",
+                    bowlingStrikeRate !== null
+                      ? formatNumber(bowlingStrikeRate)
+                      : "—",
+                  ],
+                  ["Best Spell", bestSpell],
+                  ["Maidens", maidens],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-white/10 bg-[#0e1727] p-4"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
+                      {label}
+                    </p>
 
-                  <p className="mt-2 text-xl font-black text-white">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+                    <p className="mt-2 text-xl font-black text-white">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Fielding */}
           <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
@@ -696,8 +721,6 @@ export default async function PlayerProfilePage({
               <h2 className="mt-1 text-2xl font-black uppercase tracking-tight text-white">
                 Match History
               </h2>
-
-
             </div>
 
             <p className="text-sm font-medium text-slate-400">
@@ -767,11 +790,12 @@ export default async function PlayerProfilePage({
 
               const hasFielding =
                 fieldingDetails.length > 0;
+
               const performanceSectionCount = [
-  match.batted,
-  match.bowled,
-  hasFielding,
-].filter(Boolean).length;
+                match.batted,
+                match.bowled,
+                hasFielding,
+              ].filter(Boolean).length;
 
               const dccScore = formatScore(
                 match.dcc_score,
@@ -836,14 +860,14 @@ export default async function PlayerProfilePage({
                     match.bowled ||
                     hasFielding) && (
                     <div
-  className={`grid gap-px bg-white/10 ${
-    performanceSectionCount === 1
-      ? "grid-cols-1"
-      : performanceSectionCount === 2
-        ? "sm:grid-cols-2"
-        : "sm:grid-cols-2 lg:grid-cols-3"
-  }`}
->
+                      className={`grid gap-px bg-white/10 ${
+                        performanceSectionCount === 1
+                          ? "grid-cols-1"
+                          : performanceSectionCount === 2
+                            ? "sm:grid-cols-2"
+                            : "sm:grid-cols-2 lg:grid-cols-3"
+                      }`}
+                    >
                       {match.batted && (
                         <div className="bg-[#0b1220] px-5 py-5 sm:px-6">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
