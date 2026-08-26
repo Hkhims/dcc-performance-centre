@@ -440,10 +440,11 @@ export default async function MatchesPage({
                       match.is_internal_dcc_match;
 
                     return (
-                      <article
-                        key={match.match_id}
-                        className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220]"
-                      >
+                      <Link
+  key={match.match_id}
+  href={`/matches/${match.match_id}`}
+  className="block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1524]"
+>
                         {/* Match Header */}
                         <div className="px-5 py-5 sm:px-6">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -646,7 +647,7 @@ export default async function MatchesPage({
                             Match details unavailable.
                           </div>
                         )}
-                      </article>
+                      </Link>
                     );
                   })}
                 </div>
