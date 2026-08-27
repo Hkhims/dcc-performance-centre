@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -624,9 +625,11 @@ export default async function TeamDetailPage({
               <div>
                 <div className="flex items-center gap-5">
                   {getTeamLogo(team.team_id) && (
-                    <img
+                    <Image
                       src={getTeamLogo(team.team_id)!}
                       alt={`${team.team_name} logo`}
+                      width={96}
+                      height={96}
                       className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24"
                     />
                   )}

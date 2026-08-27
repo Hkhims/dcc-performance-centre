@@ -36,7 +36,7 @@ export default function FunStats({
           {featuredStats.map((stat) => (
             <Link
               key={stat.key}
-              href={`/players/${stat.playerSlug}?fromStats=1`}
+              href={`/players/${stat.playerSlug}?fromFun=1`}
               className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#13223a] via-[#0b1728] to-[#07101d] p-6 transition duration-200 hover:-translate-y-0.5 hover:border-[#d4af37]/35 sm:p-7"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_18%,rgba(212,175,55,0.12),transparent_38%)]" />
@@ -96,7 +96,7 @@ export default function FunStats({
           {regularStats.map((stat) => (
             <Link
               key={stat.key}
-              href={`/players/${stat.playerSlug}?fromStats=1`}
+              href={`/players/${stat.playerSlug}?fromFun=1`}
               className={`group relative overflow-hidden rounded-2xl border p-5 transition duration-200 hover:-translate-y-0.5 sm:p-6 ${
                 stat.tone === "mischief"
                   ? "border-amber-300/10 bg-gradient-to-br from-[#111522] to-[#0b1220] hover:border-amber-300/25"

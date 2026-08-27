@@ -121,6 +121,7 @@ export default async function MatchDetailPage({
   params: Promise<{ match_id: string }>;
   searchParams: Promise<{
     fromTeam?: string | string[];
+    fromPlayer?: string | string[];
   }>;
 }) {
   const { match_id } = await params;
@@ -128,6 +129,10 @@ export default async function MatchDetailPage({
 
   const requestedFromTeamId = getSearchParam(
     resolvedSearchParams.fromTeam,
+  );
+
+  const requestedFromPlayerSlug = getSearchParam(
+    resolvedSearchParams.fromPlayer,
   );
 
   const { data: match, error: matchError } = await supabase
@@ -354,15 +359,26 @@ export default async function MatchDetailPage({
     ? teamNameMap.get(requestedFromTeamId) ?? null
     : null;
 
+  const contextPlayer = requestedFromPlayerSlug
+    ? (players ?? []).find(
+        (player) =>
+          player.player_slug === requestedFromPlayerSlug,
+      ) ?? null
+    : null;
+
   const backHref =
     requestedFromTeamId && contextTeamName
       ? `/teams/${requestedFromTeamId}`
-      : "/matches";
+      : contextPlayer
+        ? `/players/${contextPlayer.player_slug}`
+        : "/matches";
 
   const backLabel =
     requestedFromTeamId && contextTeamName
       ? `Back to ${contextTeamName}`
-      : "Back to matches";
+      : contextPlayer
+        ? `Back to ${contextPlayer.player_name}`
+        : "Back to matches";
 
   return (
     <section className="px-4 py-8 sm:px-6 lg:py-10">

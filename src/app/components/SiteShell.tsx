@@ -29,7 +29,7 @@ export default function SiteShell({
   return (
     <div className="min-h-screen bg-[#050914] text-white">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#050914]/95 backdrop-blur">
-        <div className="flex w-full item-center justify-between px-5 py-4">
+        <div className="flex w-full items-center justify-between px-5 py-4">
           <Link
             href="/"
             className="flex items-center gap-3"
@@ -192,29 +192,80 @@ export default function SiteShell({
         {children}
       </main>
 
+      {/* MOBILE STATS MENU */}
+      {statsOpen && (
+        <div className="fixed inset-x-4 bottom-20 z-50 md:hidden">
+          <div
+            role="menu"
+            className="ml-auto w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl shadow-black/40"
+          >
+            <Link
+              href="/stats"
+              role="menuitem"
+              onClick={() => setStatsOpen(false)}
+              className={`block border-b border-white/10 px-5 py-4 transition active:bg-white/[0.04] ${
+                pathname === "/stats"
+                  ? "bg-[#d4af37]/10"
+                  : ""
+              }`}
+            >
+              <p
+                className={`text-sm font-bold ${
+                  pathname === "/stats"
+                    ? "text-[#d4af37]"
+                    : "text-white"
+                }`}
+              >
+                Season Stats
+              </p>
+
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                Leaders, records and player performance.
+              </p>
+            </Link>
+
+            <Link
+              href="/stats/fun"
+              role="menuitem"
+              onClick={() => setStatsOpen(false)}
+              className={`block px-5 py-4 transition active:bg-white/[0.04] ${
+                pathname === "/stats/fun"
+                  ? "bg-[#d4af37]/10"
+                  : ""
+              }`}
+            >
+              <p
+                className={`text-sm font-bold ${
+                  pathname === "/stats/fun"
+                    ? "text-[#d4af37]"
+                    : "text-white"
+                }`}
+              >
+                Fun Stats
+              </p>
+
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                The numbers nobody asked for.
+              </p>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE NAV */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#08101d]/95 backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
-          {[
-            ...navItems,
-            {
-              href: "/stats",
-              label: "Stats",
-            },
-          ].map((item) => {
+          {navItems.map((item) => {
             const active =
               item.href === "/"
                 ? pathname === "/"
-                : item.href === "/stats"
-                  ? statsActive
-                  : pathname.startsWith(
-                      item.href,
-                    );
+                : pathname.startsWith(item.href);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setStatsOpen(false)}
                 className={`flex min-h-16 items-center justify-center px-2 text-xs font-semibold ${
                   active
                     ? "text-[#d4af37]"
@@ -225,6 +276,30 @@ export default function SiteShell({
               </Link>
             );
           })}
+
+          <button
+            type="button"
+            onClick={() =>
+              setStatsOpen((current) => !current)
+            }
+            aria-expanded={statsOpen}
+            aria-haspopup="menu"
+            className={`flex min-h-16 items-center justify-center gap-1 px-2 text-xs font-semibold ${
+              statsActive
+                ? "text-[#d4af37]"
+                : "text-slate-400"
+            }`}
+          >
+            Stats
+            <span
+              aria-hidden="true"
+              className={`text-[9px] transition-transform ${
+                statsOpen ? "rotate-180" : ""
+              }`}
+            >
+              ▴
+            </span>
+          </button>
         </div>
       </nav>
     </div>

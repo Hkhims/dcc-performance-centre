@@ -698,7 +698,7 @@ export default async function Home() {
 
   <div className="absolute inset-0 bg-gradient-to-t from-[#050914] via-transparent to-[#050914]/20" />
 
-  <div className="relative z-10 mx-auto w-full max-w-7xl">
+  <div className="site-container relative z-10">
     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#d4af37] sm:text-sm">
       Dunmurry Cricket Club
     </p>
