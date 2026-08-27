@@ -63,7 +63,10 @@ function getResultClasses(result: string | null) {
     return "border-red-400/20 bg-red-400/10 text-red-300";
   }
 
-  if (normalizedResult === "tied" || normalizedResult === "tie") {
+  if (
+    normalizedResult === "tied" ||
+    normalizedResult === "tie"
+  ) {
     return "border-amber-400/20 bg-amber-400/10 text-amber-300";
   }
 
@@ -78,12 +81,36 @@ function pluralise(
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function getSearchParam(
+  value: string | string[] | undefined,
+) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
 export default async function PlayerProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ player_slug: string }>;
+  searchParams: Promise<{
+  team?: string | string[];
+  fromTeam?: string | string[];
+  fromStats?: string | string[];
+}>;
 }) {
   const { player_slug } = await params;
+  const resolvedSearchParams = await searchParams;
+
+  const requestedTeamId = getSearchParam(
+    resolvedSearchParams.team,
+  );
+
+  const requestedFromTeamId = getSearchParam(
+    resolvedSearchParams.fromTeam,
+  );
+  const requestedFromStats = getSearchParam(
+  resolvedSearchParams.fromStats,
+);
 
   const { data: player, error: playerError } = await supabase
     .from("players")
@@ -141,36 +168,68 @@ export default async function PlayerProfilePage({
     throw new Error(teamsError.message);
   }
 
-  const rows = performances ?? [];
-
-  // -------------------------
-  // MATCHES
-  // -------------------------
-
-  const matches = new Set(
-    rows.map((row) => row.source_match_id),
-  ).size;
+  const allRows = performances ?? [];
+  const allTeams = teams ?? [];
 
   // -------------------------
   // TEAM APPEARANCES
   // -------------------------
 
-  const teamAppearances =
-    teams
-      ?.map((team) => {
-        const appearances = new Set(
-          rows
-            .filter((row) => row.team_id === team.team_id)
-            .map((row) => row.source_match_id),
-        ).size;
+  const teamAppearances = allTeams
+    .map((team) => {
+      const appearances = new Set(
+        allRows
+          .filter((row) => row.team_id === team.team_id)
+          .map((row) => row.source_match_id),
+      ).size;
 
-        return {
-          team_id: team.team_id,
-          team_name: team.team_name,
-          appearances,
-        };
-      })
-      .filter((team) => team.appearances > 0) ?? [];
+      return {
+        team_id: team.team_id,
+        team_name: team.team_name,
+        appearances,
+      };
+    })
+    .filter((team) => team.appearances > 0);
+
+  const appearanceTeamIds = new Set(
+    teamAppearances.map((team) => team.team_id),
+  );
+
+  const contextTeam =
+    requestedFromTeamId &&
+    appearanceTeamIds.has(requestedFromTeamId)
+      ? allTeams.find(
+          (team) => team.team_id === requestedFromTeamId,
+        ) ?? null
+      : null;
+
+  const selectedTeamId = contextTeam
+    ? contextTeam.team_id
+    : requestedTeamId &&
+        appearanceTeamIds.has(requestedTeamId)
+      ? requestedTeamId
+      : null;
+
+  const rows = selectedTeamId
+    ? allRows.filter(
+        (row) => row.team_id === selectedTeamId,
+      )
+    : allRows;
+
+  const selectedTeam =
+    selectedTeamId !== null
+      ? allTeams.find(
+          (team) => team.team_id === selectedTeamId,
+        ) ?? null
+      : null;
+
+  const allMatches = new Set(
+    allRows.map((row) => row.source_match_id),
+  ).size;
+
+  const matches = new Set(
+    rows.map((row) => row.source_match_id),
+  ).size;
 
   // -------------------------
   // BATTING
@@ -203,7 +262,9 @@ export default async function PlayerProfilePage({
     ballsFaced > 0 ? (runs / ballsFaced) * 100 : null;
 
   const fifties = battingInnings.filter(
-    (row) => (row.runs ?? 0) >= 50 && (row.runs ?? 0) < 100,
+    (row) =>
+      (row.runs ?? 0) >= 50 &&
+      (row.runs ?? 0) < 100,
   ).length;
 
   const hundreds = battingInnings.filter(
@@ -220,16 +281,19 @@ export default async function PlayerProfilePage({
     0,
   );
 
-  const highestInnings = [...battingInnings].sort((a, b) => {
-    const runDifference = (b.runs ?? 0) - (a.runs ?? 0);
+  const highestInnings = [...battingInnings].sort(
+    (a, b) => {
+      const runDifference =
+        (b.runs ?? 0) - (a.runs ?? 0);
 
-    if (runDifference !== 0) return runDifference;
+      if (runDifference !== 0) return runDifference;
 
-    if (b.is_not_out && !a.is_not_out) return 1;
-    if (a.is_not_out && !b.is_not_out) return -1;
+      if (b.is_not_out && !a.is_not_out) return 1;
+      if (a.is_not_out && !b.is_not_out) return -1;
 
-    return 0;
-  })[0];
+      return 0;
+    },
+  )[0];
 
   const highestScore = highestInnings
     ? `${highestInnings.runs ?? 0}${
@@ -269,19 +333,28 @@ export default async function PlayerProfilePage({
     wickets > 0 ? runsConceded / wickets : null;
 
   const economy =
-    bowlingBalls > 0 ? runsConceded / (bowlingBalls / 6) : null;
+    bowlingBalls > 0
+      ? runsConceded / (bowlingBalls / 6)
+      : null;
 
   const bowlingStrikeRate =
     wickets > 0 ? bowlingBalls / wickets : null;
 
-  const bestSpellRow = [...bowlingInnings].sort((a, b) => {
-    const wicketDifference =
-      (b.wickets ?? 0) - (a.wickets ?? 0);
+  const bestSpellRow = [...bowlingInnings].sort(
+    (a, b) => {
+      const wicketDifference =
+        (b.wickets ?? 0) - (a.wickets ?? 0);
 
-    if (wicketDifference !== 0) return wicketDifference;
+      if (wicketDifference !== 0) {
+        return wicketDifference;
+      }
 
-    return (a.runs_conceded ?? 0) - (b.runs_conceded ?? 0);
-  })[0];
+      return (
+        (a.runs_conceded ?? 0) -
+        (b.runs_conceded ?? 0)
+      );
+    },
+  )[0];
 
   const bestSpell = bestSpellRow
     ? `${bestSpellRow.wickets ?? 0}/${
@@ -345,13 +418,14 @@ export default async function PlayerProfilePage({
     throw new Error(matchEntriesError.message);
   }
 
-  const relevantMatchEntries = (matchEntries ?? []).filter(
-    (entry) =>
-      rows.some(
-        (row) =>
-          row.source_match_id === entry.source_match_id &&
-          row.team_id === entry.team_id,
-      ),
+  const relevantMatchEntries = (
+    matchEntries ?? []
+  ).filter((entry) =>
+    rows.some(
+      (row) =>
+        row.source_match_id === entry.source_match_id &&
+        row.team_id === entry.team_id,
+    ),
   );
 
   const matchIds = [
@@ -395,7 +469,7 @@ export default async function PlayerProfilePage({
   }
 
   const teamNameMap = new Map(
-    (teams ?? []).map((team) => [
+    allTeams.map((team) => [
       team.team_id,
       team.team_name,
     ]),
@@ -441,8 +515,9 @@ export default async function PlayerProfilePage({
           teamNameMap.get(performance.team_id) ??
           performance.team_id,
         competition_name:
-          competitionNameMap.get(matchEntry.competition_id) ??
-          "Competition",
+          competitionNameMap.get(
+            matchEntry.competition_id,
+          ) ?? "Competition",
         opponent: matchEntry.opponent_display_name,
         result: matchEntry.result,
         dcc_score: matchEntry.dcc_score,
@@ -468,7 +543,7 @@ export default async function PlayerProfilePage({
     });
 
   // -------------------------
-  // SEASON OVERVIEW LAYOUT
+  // ADAPTIVE OVERVIEW
   // -------------------------
 
   const hasSeasonBatting = innings > 0;
@@ -477,45 +552,57 @@ export default async function PlayerProfilePage({
   const seasonOverviewCount = [
     hasSeasonBatting,
     hasSeasonBowling,
-    true, // Fielding always remains visible
+    true,
   ].filter(Boolean).length;
 
   const initials = getInitials(player.player_name);
 
+  const cameFromStats = requestedFromStats === "1";
+
+const backHref = contextTeam
+  ? `/teams/${contextTeam.team_id}`
+  : cameFromStats
+    ? "/stats#player-stats"
+    : "/players";
+
+const backLabel = contextTeam
+  ? `Back to ${contextTeam.team_name}`
+  : cameFromStats
+    ? "Back to stats"
+    : "Back to players";
+
   return (
     <section className="px-4 py-8 sm:px-6 lg:py-10">
-      <div className="mx-auto max-w-7xl">
+      <div className="site-container">
         {/* Back */}
         <Link
-          href="/players"
+          href={backHref}
           className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
         >
           <span aria-hidden="true">←</span>
-          Back to players
+          {backLabel}
         </Link>
 
         {/* Profile Hero */}
         <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#101d32] via-[#0c1728] to-[#08111f]">
-          <div className="grid min-h-[280px] md:grid-cols-[260px_1fr] lg:grid-cols-[290px_1fr]">
-            {/* Portrait / future player photo area */}
-            <div className="relative flex min-h-[210px] items-center justify-center border-b border-white/10 bg-white/[0.02] md:min-h-0 md:border-b-0 md:border-r">
+          <div className="grid min-h-[240px] md:grid-cols-[260px_1fr] lg:grid-cols-[290px_1fr]">
+            <div className="relative flex min-h-[190px] items-center justify-center border-b border-white/10 bg-white/[0.02] md:min-h-0 md:border-b-0 md:border-r">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.08),transparent_65%)]" />
 
-              <div className="relative flex h-36 w-36 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#101827] shadow-2xl sm:h-40 sm:w-40">
+              <div className="relative flex h-32 w-32 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#101827] shadow-2xl sm:h-36 sm:w-36">
                 <span className="text-5xl font-black tracking-tight text-[#d4af37] sm:text-6xl">
                   {initials}
                 </span>
               </div>
             </div>
 
-            {/* Player identity */}
-            <div className="flex items-center px-6 py-7 sm:px-8 lg:px-10">
+            <div className="flex items-center px-6 py-6 sm:px-8 lg:px-10">
               <div className="w-full">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
                   2026 Player Profile
                 </p>
 
-                <h1 className="mt-3 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl lg:text-4xl">
+                <h1 className="mt-3 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
                   {player.player_name}
                 </h1>
 
@@ -526,21 +613,90 @@ export default async function PlayerProfilePage({
                 )}
 
                 {teamAppearances.length > 0 && (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {teamAppearances.map((team) => (
-                      <div
-                        key={team.team_id}
-                        className="inline-flex items-center gap-2 rounded-lg border border-[#d4af37]/25 bg-[#d4af37]/5 px-3 py-2"
-                      >
-                        <span className="text-xs font-semibold uppercase tracking-wide text-[#d4af37]">
-                          {team.team_name}
-                        </span>
+                  <div className="mt-5">
+                    {!contextTeam && (
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Filter by team
+                      </p>
+                    )}
 
-                        <span className="rounded bg-white/5 px-2 py-0.5 text-xs font-bold text-white">
-                          {team.appearances}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      {!contextTeam && (
+                        <Link
+                          href={`/players/${player.player_slug}`}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition ${
+                            selectedTeamId === null
+                              ? "border-[#d4af37]/60 bg-[#d4af37]/15"
+                              : "border-white/10 bg-white/[0.02] hover:border-[#d4af37]/30"
+                          }`}
+                        >
+                          <span
+                            className={`text-xs font-semibold uppercase tracking-wide ${
+                              selectedTeamId === null
+                                ? "text-[#d4af37]"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            All Teams
+                          </span>
+
+                          <span className="rounded bg-white/5 px-2 py-0.5 text-xs font-bold text-white">
+                            {allMatches}
+                          </span>
+                        </Link>
+                      )}
+
+                      {teamAppearances
+                        .filter((team) =>
+                          contextTeam
+                            ? team.team_id ===
+                              contextTeam.team_id
+                            : true,
+                        )
+                        .map((team) => {
+                          const active =
+                            selectedTeamId === team.team_id;
+
+                          return contextTeam ? (
+                            <div
+                              key={team.team_id}
+                              className="inline-flex items-center gap-2 rounded-lg border border-[#d4af37]/60 bg-[#d4af37]/15 px-3 py-2"
+                            >
+                              <span className="text-xs font-semibold uppercase tracking-wide text-[#d4af37]">
+                                {team.team_name}
+                              </span>
+
+                              <span className="rounded bg-white/5 px-2 py-0.5 text-xs font-bold text-white">
+                                {team.appearances}
+                              </span>
+                            </div>
+                          ) : (
+                            <Link
+                              key={team.team_id}
+                              href={`/players/${player.player_slug}?team=${team.team_id}`}
+                              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition ${
+                                active
+                                  ? "border-[#d4af37]/60 bg-[#d4af37]/15"
+                                  : "border-[#d4af37]/20 bg-[#d4af37]/5 hover:border-[#d4af37]/40"
+                              }`}
+                            >
+                              <span
+                                className={`text-xs font-semibold uppercase tracking-wide ${
+                                  active
+                                    ? "text-[#d4af37]"
+                                    : "text-[#d4af37]/75"
+                                }`}
+                              >
+                                {team.team_name}
+                              </span>
+
+                              <span className="rounded bg-white/5 px-2 py-0.5 text-xs font-bold text-white">
+                                {team.appearances}
+                              </span>
+                            </Link>
+                          );
+                        })}
+                    </div>
                   </div>
                 )}
 
@@ -548,8 +704,12 @@ export default async function PlayerProfilePage({
                   <span className="text-lg font-bold text-white">
                     {matches}
                   </span>
+
                   <span>
                     {matches === 1 ? "match" : "matches"}
+                    {selectedTeam && !contextTeam
+                      ? ` for ${selectedTeam.team_name}`
+                      : ""}
                   </span>
                 </div>
               </div>
@@ -567,18 +727,15 @@ export default async function PlayerProfilePage({
                 : "lg:grid-cols-3"
           }`}
         >
-          {/* Batting */}
           {hasSeasonBatting && (
             <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
-                  Batting
-                </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                Batting
+              </p>
 
-                <h2 className="mt-1 text-lg font-black uppercase text-white">
-                  2026 Batting
-                </h2>
-              </div>
+              <h2 className="mt-1 text-lg font-black uppercase text-white">
+                2026 Batting
+              </h2>
 
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                 {[
@@ -593,13 +750,17 @@ export default async function PlayerProfilePage({
                   [
                     "Strike Rate",
                     battingStrikeRate !== null
-                      ? formatNumber(battingStrikeRate)
+                      ? formatNumber(
+                          battingStrikeRate,
+                        )
                       : "—",
                   ],
                   ["Highest", highestScore],
                   ["Not Outs", notOuts],
-                  ["50s / 100s", `${fifties} / ${hundreds}`],
-                  ["4s / 6s", `${fours} / ${sixes}`],
+                  ["50s", fifties],
+                  ["100s", hundreds],
+                  ["4s", fours],
+                  ["6s", sixes],
                 ].map(([label, value]) => (
                   <div
                     key={label}
@@ -618,24 +779,24 @@ export default async function PlayerProfilePage({
             </section>
           )}
 
-          {/* Bowling */}
           {hasSeasonBowling && (
             <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
-                  Bowling
-                </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+                Bowling
+              </p>
 
-                <h2 className="mt-1 text-lg font-black uppercase text-white">
-                  2026 Bowling
-                </h2>
-              </div>
+              <h2 className="mt-1 text-lg font-black uppercase text-white">
+                2026 Bowling
+              </h2>
 
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                 {[
                   ["Wickets", wickets],
                   ["Innings", bowlInnings],
-                  ["Overs", ballsToOvers(bowlingBalls)],
+                  [
+                    "Overs",
+                    ballsToOvers(bowlingBalls),
+                  ],
                   [
                     "Average",
                     bowlingAverage !== null
@@ -651,7 +812,9 @@ export default async function PlayerProfilePage({
                   [
                     "Strike Rate",
                     bowlingStrikeRate !== null
-                      ? formatNumber(bowlingStrikeRate)
+                      ? formatNumber(
+                          bowlingStrikeRate,
+                        )
                       : "—",
                   ],
                   ["Best Spell", bestSpell],
@@ -674,24 +837,24 @@ export default async function PlayerProfilePage({
             </section>
           )}
 
-          {/* Fielding */}
           <section className="rounded-2xl border border-white/10 bg-[#0b1220] p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
-                Fielding
-              </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37]">
+              Fielding
+            </p>
 
-              <h2 className="mt-1 text-lg font-black uppercase text-white">
-                2026 Fielding
-              </h2>
-            </div>
+            <h2 className="mt-1 text-lg font-black uppercase text-white">
+              2026 Fielding
+            </h2>
 
             <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-1 xl:grid-cols-2">
               {[
                 ["Catches", catches],
                 ["Stumpings", stumpings],
                 ["Run Outs", runOuts],
-                ["Total", catches + stumpings + runOuts],
+                [
+                  "Total",
+                  catches + stumpings + runOuts,
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -741,23 +904,28 @@ export default async function PlayerProfilePage({
 
               if (match.batted) {
                 if ((match.fours ?? 0) > 0) {
-                  battingDetails.push(`${match.fours}×4`);
+                  battingDetails.push(
+                    `${match.fours}×4`,
+                  );
                 }
 
                 if ((match.sixes ?? 0) > 0) {
-                  battingDetails.push(`${match.sixes}×6`);
+                  battingDetails.push(
+                    `${match.sixes}×6`,
+                  );
                 }
               }
 
-              if (match.bowled) {
-                if ((match.maidens ?? 0) > 0) {
-                  bowlingDetails.push(
-                    pluralise(
-                      match.maidens ?? 0,
-                      "maiden",
-                    ),
-                  );
-                }
+              if (
+                match.bowled &&
+                (match.maidens ?? 0) > 0
+              ) {
+                bowlingDetails.push(
+                  pluralise(
+                    match.maidens ?? 0,
+                    "maiden",
+                  ),
+                );
               }
 
               if ((match.catches ?? 0) > 0) {
@@ -808,16 +976,19 @@ export default async function PlayerProfilePage({
               );
 
               return (
-                <article
+                <Link
                   key={`${match.source_match_id}-${match.team_id}`}
-                  className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220]"
+                  href={`/matches/${match.match_id}`}
+                  className="group block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1626]"
                 >
                   <div className="border-b border-white/10 px-5 py-4 sm:px-6">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d4af37]">
-                            {formatMatchDate(match.match_date)}
+                            {formatMatchDate(
+                              match.match_date,
+                            )}
                           </p>
 
                           <span
@@ -835,11 +1006,13 @@ export default async function PlayerProfilePage({
                           />
 
                           <p className="text-xs font-medium text-slate-500">
-                            {match.competition_name}
+                            {
+                              match.competition_name
+                            }
                           </p>
                         </div>
 
-                        <h3 className="mt-3 text-lg font-black text-white sm:text-xl">
+                        <h3 className="mt-3 text-lg font-black text-white transition group-hover:text-[#d4af37] sm:text-xl">
                           vs {match.opponent}
                         </h3>
                       </div>
@@ -863,7 +1036,8 @@ export default async function PlayerProfilePage({
                       className={`grid gap-px bg-white/10 ${
                         performanceSectionCount === 1
                           ? "grid-cols-1"
-                          : performanceSectionCount === 2
+                          : performanceSectionCount ===
+                              2
                             ? "sm:grid-cols-2"
                             : "sm:grid-cols-2 lg:grid-cols-3"
                       }`}
@@ -876,19 +1050,25 @@ export default async function PlayerProfilePage({
 
                           <p className="mt-2 text-xl font-black text-white">
                             {match.runs ?? 0}
-                            {match.is_not_out ? "*" : ""}
+                            {match.is_not_out
+                              ? "*"
+                              : ""}
 
                             {match.balls_faced !== null &&
-                              match.balls_faced !== undefined && (
+                              match.balls_faced !==
+                                undefined && (
                                 <span className="ml-2 text-sm font-semibold text-slate-400">
                                   ({match.balls_faced})
                                 </span>
                               )}
                           </p>
 
-                          {battingDetails.length > 0 && (
+                          {battingDetails.length >
+                            0 && (
                             <p className="mt-2 text-sm text-slate-400">
-                              {battingDetails.join(" • ")}
+                              {battingDetails.join(
+                                " • ",
+                              )}
                             </p>
                           )}
                         </div>
@@ -907,10 +1087,12 @@ export default async function PlayerProfilePage({
 
                           <p className="mt-2 text-sm text-slate-400">
                             {ballsToOvers(
-                              match.bowling_balls ?? 0,
+                              match.bowling_balls ??
+                                0,
                             )}{" "}
                             overs
-                            {bowlingDetails.length > 0
+                            {bowlingDetails.length >
+                            0
                               ? ` • ${bowlingDetails.join(
                                   " • ",
                                 )}`
@@ -926,7 +1108,9 @@ export default async function PlayerProfilePage({
                           </p>
 
                           <p className="mt-2 text-base font-bold text-white">
-                            {fieldingDetails.join(" • ")}
+                            {fieldingDetails.join(
+                              " • ",
+                            )}
                           </p>
                         </div>
                       )}
@@ -941,11 +1125,17 @@ export default async function PlayerProfilePage({
                             {match.team_name}
                           </span>{" "}
                           {dccScore}
+
                           {match.dcc_balls !== null &&
-                            match.dcc_balls !== undefined && (
+                            match.dcc_balls !==
+                              undefined && (
                               <span className="text-slate-500">
                                 {" "}
-                                ({ballsToOvers(match.dcc_balls)} ov)
+                                (
+                                {ballsToOvers(
+                                  match.dcc_balls,
+                                )}{" "}
+                                ov)
                               </span>
                             )}
                         </p>
@@ -957,8 +1147,11 @@ export default async function PlayerProfilePage({
                             {match.opponent}
                           </span>{" "}
                           {opponentScore}
-                          {match.opponent_balls !== null &&
-                            match.opponent_balls !== undefined && (
+
+                          {match.opponent_balls !==
+                            null &&
+                            match.opponent_balls !==
+                              undefined && (
                               <span className="text-slate-500">
                                 {" "}
                                 (
@@ -972,7 +1165,7 @@ export default async function PlayerProfilePage({
                       )}
                     </div>
                   )}
-                </article>
+                </Link>
               );
             })}
           </div>

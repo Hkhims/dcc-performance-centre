@@ -10,7 +10,7 @@ export default async function PlayersPage() {
   if (error) {
     return (
       <section className="px-6 py-16">
-        <div className="mx-auto max-w-7xl">
+        <div className="site-container">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
             2026 Season
           </p>
@@ -35,25 +35,19 @@ export default async function PlayersPage() {
 
   return (
     <section className="px-6 py-16">
-      <div className="mx-auto max-w-7xl">
+      <div className="site-container">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
           2026 Season
         </p>
 
-        <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-4xl font-black uppercase sm:text-5xl">
-              Players
-            </h1>
+        <div className="mt-2">
+          <h1 className="text-4xl font-black uppercase sm:text-5xl">
+            Players
+          </h1>
 
-            <p className="mt-4 max-w-2xl text-slate-400">
-              Explore Dunmurry Cricket Club players and their performances
-              across the 2026 season.
-            </p>
-          </div>
-
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-            {players?.length ?? 0} Players
+          <p className="mt-4 max-w-2xl text-slate-400">
+            Explore Dunmurry Cricket Club players and their performances
+            across the 2026 season.
           </p>
         </div>
 

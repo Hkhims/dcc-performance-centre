@@ -108,12 +108,27 @@ function getResultClasses(result: string | null) {
   return "border-white/10 bg-white/5 text-slate-300";
 }
 
+function getSearchParam(
+  value: string | string[] | undefined,
+) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
 export default async function MatchDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ match_id: string }>;
+  searchParams: Promise<{
+    fromTeam?: string | string[];
+  }>;
 }) {
   const { match_id } = await params;
+  const resolvedSearchParams = await searchParams;
+
+  const requestedFromTeamId = getSearchParam(
+    resolvedSearchParams.fromTeam,
+  );
 
   const { data: match, error: matchError } = await supabase
     .from("matches")
@@ -331,16 +346,34 @@ export default async function MatchDetailPage({
 
   const isInternal = match.is_internal_dcc_match;
 
+  // --------------------------------------------------
+  // NAVIGATION CONTEXT
+  // --------------------------------------------------
+
+  const contextTeamName = requestedFromTeamId
+    ? teamNameMap.get(requestedFromTeamId) ?? null
+    : null;
+
+  const backHref =
+    requestedFromTeamId && contextTeamName
+      ? `/teams/${requestedFromTeamId}`
+      : "/matches";
+
+  const backLabel =
+    requestedFromTeamId && contextTeamName
+      ? `Back to ${contextTeamName}`
+      : "Back to matches";
+
   return (
     <section className="px-4 py-8 sm:px-6 lg:py-10">
-      <div className="mx-auto max-w-7xl">
+      <div className="site-container">
         {/* Back */}
         <Link
-          href="/matches"
+          href={backHref}
           className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
         >
           <span aria-hidden="true">←</span>
-          Back to matches
+          {backLabel}
         </Link>
 
         {/* Match Hero */}

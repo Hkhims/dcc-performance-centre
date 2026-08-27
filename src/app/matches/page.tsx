@@ -295,7 +295,7 @@ export default async function MatchesPage({
 
   return (
     <section className="px-4 py-8 sm:px-6 lg:py-10">
-      <div className="mx-auto max-w-7xl">
+      <div className="site-container">
         {/* Header */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
@@ -441,10 +441,10 @@ export default async function MatchesPage({
 
                     return (
                       <Link
-  key={match.match_id}
-  href={`/matches/${match.match_id}`}
-  className="block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1524]"
->
+                        key={match.match_id}
+                        href={`/matches/${match.match_id}`}
+                        className="group block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1626]"
+                      >
                         {/* Match Header */}
                         <div className="px-5 py-5 sm:px-6">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -468,9 +468,15 @@ export default async function MatchesPage({
                                 </p>
                               </div>
 
-                              <h3 className="mt-3 text-xl font-black text-white sm:text-2xl">
-                                {match.fixture_label}
-                              </h3>
+                              <div className="mt-3 flex items-center gap-3">
+                                <h3 className="text-xl font-black text-white transition group-hover:text-[#d4af37] sm:text-2xl">
+                                  {match.fixture_label}
+                                </h3>
+
+                                <span className="text-sm text-slate-600 transition group-hover:translate-x-1 group-hover:text-[#d4af37]">
+                                  →
+                                </span>
+                              </div>
                             </div>
 
                             <div className="flex flex-wrap gap-2">
@@ -486,8 +492,8 @@ export default async function MatchesPage({
                               )}
 
                               {!isScheduled &&
-  !isInternal &&
-  primaryEntry?.result && (
+                                !isInternal &&
+                                primaryEntry?.result && (
                                   <span
                                     className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] ${getResultClasses(
                                       primaryEntry.result,
@@ -560,12 +566,10 @@ export default async function MatchesPage({
                               <div className="grid sm:grid-cols-2">
                                 <div className="border-b border-white/10 px-5 py-4 sm:border-b-0 sm:border-r sm:px-6">
                                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                    {
-                                      teamNameMap.get(
-                                        primaryEntry.team_id,
-                                      ) ??
-                                      primaryEntry.team_id
-                                    }
+                                    {teamNameMap.get(
+                                      primaryEntry.team_id,
+                                    ) ??
+                                      primaryEntry.team_id}
                                   </p>
 
                                   {formatScore(

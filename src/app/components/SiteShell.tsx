@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import Image from "next/image";
 
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/matches", label: "Matches" },
   { href: "/teams", label: "Teams" },
   { href: "/players", label: "Players" },
-  { href: "/stats", label: "Stats" },
 ];
 
 export default function SiteShell({
@@ -18,30 +19,49 @@ export default function SiteShell({
 }) {
   const pathname = usePathname();
 
+  const [statsOpen, setStatsOpen] =
+    useState(false);
+
+  const statsActive =
+    pathname === "/stats" ||
+    pathname.startsWith("/stats/");
+
   return (
     <div className="min-h-screen bg-[#050914] text-white">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#050914]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md border border-[#d4af37]/40 bg-[#0b1220] text-sm font-black text-[#d4af37]">
-              DCC
-            </div>
+        <div className="flex w-full item-center justify-between px-5 py-4">
+          <Link
+            href="/"
+            className="flex items-center gap-3"
+          >
+            <Image
+  src="/images/dcc-logo.png"
+  alt="Dunmurry Cricket Club logo"
+  width={48}
+  height={48}
+  className="h-12 w-12 object-contain"
+/>
+
             <div>
               <p className="text-sm font-black uppercase tracking-wide">
                 Dunmurry Cricket Club
               </p>
+
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                 Performance Centre
               </p>
             </div>
           </Link>
 
+          {/* DESKTOP NAV */}
           <nav className="hidden items-center gap-7 md:flex">
             {navItems.map((item) => {
               const active =
                 item.href === "/"
                   ? pathname === "/"
-                  : pathname.startsWith(item.href);
+                  : pathname.startsWith(
+                      item.href,
+                    );
 
               return (
                 <Link
@@ -57,26 +77,148 @@ export default function SiteShell({
                 </Link>
               );
             })}
+
+            {/* STATS DROPDOWN */}
+            <div
+              className="relative"
+              onMouseEnter={() =>
+                setStatsOpen(true)
+              }
+              onMouseLeave={() =>
+                setStatsOpen(false)
+              }
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setStatsOpen(
+                    (current) => !current,
+                  )
+                }
+                aria-expanded={statsOpen}
+                aria-haspopup="menu"
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold transition ${
+                  statsActive
+                    ? "text-[#d4af37]"
+                    : "text-slate-300 hover:text-white"
+                }`}
+              >
+                Stats
+
+                <span
+                  aria-hidden="true"
+                  className={`text-[10px] transition-transform ${
+                    statsOpen
+                      ? "rotate-180"
+                      : ""
+                  }`}
+                >
+                  ▾
+                </span>
+              </button>
+
+              {statsOpen && (
+                <div className="absolute right-0 top-full pt-3">
+                  <div
+                    role="menu"
+                    className="w-52 overflow-hidden rounded-xl border border-white/10 bg-[#0b1220] shadow-2xl shadow-black/30"
+                  >
+                    <Link
+                      href="/stats"
+                      role="menuitem"
+                      onClick={() =>
+                        setStatsOpen(false)
+                      }
+                      className={`block border-b border-white/10 px-4 py-3.5 transition hover:bg-white/[0.04] ${
+                        pathname === "/stats"
+                          ? "bg-[#d4af37]/10"
+                          : ""
+                      }`}
+                    >
+                      <p
+                        className={`text-sm font-bold ${
+                          pathname === "/stats"
+                            ? "text-[#d4af37]"
+                            : "text-white"
+                        }`}
+                      >
+                        Season Stats
+                      </p>
+
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                        Leaders, records and
+                        player performance.
+                      </p>
+                    </Link>
+
+                    <Link
+                      href="/stats/fun"
+                      role="menuitem"
+                      onClick={() =>
+                        setStatsOpen(false)
+                      }
+                      className={`block px-4 py-3.5 transition hover:bg-white/[0.04] ${
+                        pathname ===
+                        "/stats/fun"
+                          ? "bg-[#d4af37]/10"
+                          : ""
+                      }`}
+                    >
+                      <p
+                        className={`text-sm font-bold ${
+                          pathname ===
+                          "/stats/fun"
+                            ? "text-[#d4af37]"
+                            : "text-white"
+                        }`}
+                      >
+                        Fun Stats
+                      </p>
+
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                        The numbers nobody
+                        asked for.
+                      </p>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
           </nav>
         </div>
       </header>
 
-      <main className="pb-20 md:pb-0">{children}</main>
+      <main className="pb-20 md:pb-0">
+        {children}
+      </main>
 
+      {/* MOBILE NAV */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#08101d]/95 backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
-          {navItems.map((item) => {
+          {[
+            ...navItems,
+            {
+              href: "/stats",
+              label: "Stats",
+            },
+          ].map((item) => {
             const active =
               item.href === "/"
                 ? pathname === "/"
-                : pathname.startsWith(item.href);
+                : item.href === "/stats"
+                  ? statsActive
+                  : pathname.startsWith(
+                      item.href,
+                    );
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex min-h-16 items-center justify-center px-2 text-xs font-semibold ${
-                  active ? "text-[#d4af37]" : "text-slate-400"
+                  active
+                    ? "text-[#d4af37]"
+                    : "text-slate-400"
                 }`}
               >
                 {item.label}
