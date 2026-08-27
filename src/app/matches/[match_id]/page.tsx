@@ -122,6 +122,7 @@ export default async function MatchDetailPage({
   searchParams: Promise<{
     fromTeam?: string | string[];
     fromPlayer?: string | string[];
+    playerTeam?: string | string[];
   }>;
 }) {
   const { match_id } = await params;
@@ -133,6 +134,10 @@ export default async function MatchDetailPage({
 
   const requestedFromPlayerSlug = getSearchParam(
     resolvedSearchParams.fromPlayer,
+  );
+
+  const requestedPlayerTeamId = getSearchParam(
+    resolvedSearchParams.playerTeam,
   );
 
   const { data: match, error: matchError } = await supabase
@@ -370,7 +375,11 @@ export default async function MatchDetailPage({
     requestedFromTeamId && contextTeamName
       ? `/teams/${requestedFromTeamId}`
       : contextPlayer
-        ? `/players/${contextPlayer.player_slug}`
+        ? `/players/${contextPlayer.player_slug}${
+            requestedPlayerTeamId
+              ? `?team=${requestedPlayerTeamId}`
+              : ""
+          }`
         : "/matches";
 
   const backLabel =
@@ -711,7 +720,7 @@ export default async function MatchDetailPage({
                                   <td className="px-5 py-4 font-semibold text-white sm:px-6">
                                     {player ? (
                                       <Link
-                                        href={`/players/${player.player_slug}`}
+                                        href={`/players/${player.player_slug}?fromMatch=${match.match_id}`}
                                         className="transition hover:text-[#d4af37]"
                                       >
                                         {player.player_name}
@@ -892,7 +901,7 @@ export default async function MatchDetailPage({
                                   <td className="px-5 py-4 font-semibold text-white sm:px-6">
                                     {player ? (
                                       <Link
-                                        href={`/players/${player.player_slug}`}
+                                        href={`/players/${player.player_slug}?fromMatch=${match.match_id}`}
                                         className="transition hover:text-[#d4af37]"
                                       >
                                         {player.player_name}
@@ -1013,7 +1022,7 @@ export default async function MatchDetailPage({
                               <p className="font-bold text-white">
                                 {player ? (
                                   <Link
-                                    href={`/players/${player.player_slug}`}
+                                    href={`/players/${player.player_slug}?fromMatch=${match.match_id}`}
                                     className="transition hover:text-[#d4af37]"
                                   >
                                     {player.player_name}

@@ -97,6 +97,7 @@ export default async function PlayerProfilePage({
   fromTeam?: string | string[];
   fromStats?: string | string[];
   fromFun?: string | string[];
+  fromMatch?: string | string[];
 }>;
 }) {
   const { player_slug } = await params;
@@ -115,6 +116,10 @@ export default async function PlayerProfilePage({
 
   const requestedFromFun = getSearchParam(
     resolvedSearchParams.fromFun,
+  );
+
+  const requestedFromMatch = getSearchParam(
+    resolvedSearchParams.fromMatch,
   );
 
   const { data: player, error: playerError } = await supabase
@@ -565,21 +570,25 @@ export default async function PlayerProfilePage({
   const cameFromStats = requestedFromStats === "1";
   const cameFromFun = requestedFromFun === "1";
 
-  const backHref = contextTeam
-    ? `/teams/${contextTeam.team_id}`
-    : cameFromFun
-      ? "/stats/fun"
-      : cameFromStats
-        ? "/stats#player-stats"
-        : "/players";
+  const backHref = requestedFromMatch
+    ? `/matches/${requestedFromMatch}`
+    : contextTeam
+      ? `/teams/${contextTeam.team_id}`
+      : cameFromFun
+        ? "/stats/fun"
+        : cameFromStats
+          ? "/stats#player-stats"
+          : "/players";
 
-  const backLabel = contextTeam
-    ? `Back to ${contextTeam.team_name}`
-    : cameFromFun
-      ? "Back to Fun Stats"
-      : cameFromStats
-        ? "Back to stats"
-        : "Back to players";
+  const backLabel = requestedFromMatch
+    ? "Back to match"
+    : contextTeam
+      ? `Back to ${contextTeam.team_name}`
+      : cameFromFun
+        ? "Back to Fun Stats"
+        : cameFromStats
+          ? "Back to stats"
+          : "Back to players";
 
   return (
     <section className="px-4 py-8 sm:px-6 lg:py-10">
@@ -988,7 +997,7 @@ export default async function PlayerProfilePage({
               return (
                 <Link
                   key={`${match.source_match_id}-${match.team_id}`}
-                  href={`/matches/${match.match_id}?fromPlayer=${player.player_slug}`}
+                  href={`/matches/${match.match_id}?fromPlayer=${player.player_slug}${selectedTeamId ? `&playerTeam=${selectedTeamId}` : ""}`}
                   className="group block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1626]"
                 >
                   <div className="border-b border-white/10 px-5 py-4 sm:px-6">

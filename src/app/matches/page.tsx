@@ -442,7 +442,7 @@ export default async function MatchesPage({
                     return (
                       <Link
                         key={match.match_id}
-                        href={`/matches/${match.match_id}`}
+                        href={`/matches/${match.match_id}${selectedTeam ? `?fromTeam=${selectedTeam}` : ""}`}
                         className="group block overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition hover:border-[#d4af37]/30 hover:bg-[#0d1626]"
                       >
                         {/* Match Header */}

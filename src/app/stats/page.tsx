@@ -878,7 +878,7 @@ export default async function StatsPage() {
               (leader) => (
                 <Link
                   key={leader.label}
-                  href={`/players/${leader.player.player_slug}`}
+                  href={`/players/${leader.player.player_slug}?fromStats=1`}
                   className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] transition duration-200 hover:-translate-y-0.5 hover:border-[#d4af37]/35 hover:bg-[#0d1626]"
                 >
                   <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent opacity-0 transition group-hover:opacity-100" />
