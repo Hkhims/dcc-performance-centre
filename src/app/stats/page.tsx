@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import StatsExplorer from "./StatsExplorer";
+
+export const metadata: Metadata = {
+  title: "Season Stats",
+  description:
+    "Explore Dunmurry Cricket Club's 2026 batting, bowling and fielding statistics.",
+};
 
 function formatMatchDate(date: string | null) {
   if (!date) {

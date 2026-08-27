@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+
+export const metadata: Metadata = {
+  title: "Teams",
+  description:
+    "Explore Dunmurry Cricket Club's six teams and their 2026 season performance.",
+};
 
 const teamLogoMap: Record<string, string> = {
   T01: "/team-logos/dcc-1.png",

@@ -54,7 +54,7 @@ export default function SiteShell({
           </Link>
 
           {/* DESKTOP NAV */}
-          <nav className="hidden items-center gap-7 md:flex">
+          <nav aria-label="Primary navigation" className="hidden items-center gap-7 md:flex">
             {navItems.map((item) => {
               const active =
                 item.href === "/"
@@ -253,7 +253,7 @@ export default function SiteShell({
       )}
 
       {/* MOBILE NAV */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#08101d]/95 backdrop-blur md:hidden">
+      <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#08101d]/95 backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
           {navItems.map((item) => {
             const active =

@@ -639,6 +639,11 @@ export default function StatsExplorer({
       <button
         type="button"
         onClick={() => handleSort(sort)}
+        aria-label={
+          active
+            ? `${label}, sorted ${sortDirection === "desc" ? "descending" : "ascending"}`
+            : `Sort by ${label}`
+        }
         className={`inline-flex items-center gap-1 transition ${
           active
             ? "text-[#d4af37]"
@@ -681,7 +686,11 @@ export default function StatsExplorer({
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220]">
         {/* CONTROLS */}
         <div className="flex flex-col gap-4 border-b border-white/10 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex gap-2 overflow-x-auto">
+          <div
+            className="flex gap-2 overflow-x-auto"
+            role="tablist"
+            aria-label="Statistics category"
+          >
             {(
               [
                 ["batting", "Batting"],
@@ -696,6 +705,8 @@ export default function StatsExplorer({
                 <button
                   key={value}
                   type="button"
+                  role="tab"
+                  aria-selected={active}
                   onClick={() =>
                     changeTab(value)
                   }

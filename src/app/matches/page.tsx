@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+
+export const metadata: Metadata = {
+  title: "Matches",
+  description:
+    "Browse Dunmurry Cricket Club's 2026 results and fixtures across every team and competition.",
+};
 
 function getSearchParam(
   value: string | string[] | undefined,

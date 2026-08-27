@@ -3,9 +3,13 @@ import "./globals.css";
 import SiteShell from "./components/SiteShell";
 
 export const metadata: Metadata = {
-  title: "DCC Performance Centre",
+  title: {
+    default: "DCC Performance Centre",
+    template: "%s | DCC Performance Centre",
+  },
   description:
-    "Results, statistics and performances from across Dunmurry Cricket Club.",
+    "Results, statistics, team performance and player records from Dunmurry Cricket Club's 2026 season.",
+  applicationName: "DCC Performance Centre",
 };
 
 export default function RootLayout({

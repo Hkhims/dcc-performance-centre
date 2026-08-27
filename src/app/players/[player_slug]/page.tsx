@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+export const metadata: Metadata = {
+  title: "Player Profile",
+};
 
 function formatNumber(value: number, decimals = 2) {
   return value.toFixed(decimals);

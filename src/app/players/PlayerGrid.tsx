@@ -58,7 +58,12 @@ export default function PlayerGrid({
     <>
       {/* SEARCH + PLAYER COUNT */}
       <div className="mt-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <label htmlFor="player-search" className="sr-only">
+          Search players
+        </label>
+
         <input
+          id="player-search"
           type="search"
           value={search}
           onChange={(event) =>
@@ -81,10 +86,15 @@ export default function PlayerGrid({
       </div>
 
       {/* A–Z QUICK FILTER */}
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div
+        className="mt-5 flex flex-wrap gap-2"
+        role="group"
+        aria-label="Filter players by first letter"
+      >
         <button
           type="button"
           onClick={() => setSelectedLetter("ALL")}
+          aria-pressed={selectedLetter === "ALL"}
           className={`rounded-lg border px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] transition ${
             selectedLetter === "ALL"
               ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"
@@ -109,6 +119,7 @@ export default function PlayerGrid({
               onClick={() =>
                 setSelectedLetter(letter)
               }
+              aria-pressed={isActive}
               className={`rounded-lg border px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] transition ${
                 isActive
                   ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"

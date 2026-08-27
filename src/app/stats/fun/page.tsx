@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import FunStats, {
   type FunStat,
 } from "../FunStats";
+
+export const metadata: Metadata = {
+  title: "Fun Stats",
+  description:
+    "A less serious look at the quirks, oddities and unexpected numbers from Dunmurry Cricket Club's 2026 season.",
+};
 
 function formatMatchDate(date: string | null) {
   if (!date) {

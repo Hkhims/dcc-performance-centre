@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+export const metadata: Metadata = {
+  title: "Team Performance",
+};
 
 function formatNumber(value: number | null, decimals = 2) {
   if (value === null || value === undefined) return "—";

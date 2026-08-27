@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import { supabase } from "@/lib/supabase";
 import PlayerGrid from "./PlayerGrid";
+
+export const metadata: Metadata = {
+  title: "Players",
+  description:
+    "Explore Dunmurry Cricket Club players and their performances across the 2026 season.",
+};
 
 export default async function PlayersPage() {
   const { data: players, error } = await supabase
