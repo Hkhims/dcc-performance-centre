@@ -39,6 +39,7 @@ type StatsExplorerProps = {
   players: Player[];
   teams: Team[];
   performances: Performance[];
+  initialTeamId?: string;
 };
 
 type Tab = "batting" | "bowling" | "fielding";
@@ -106,12 +107,13 @@ export default function StatsExplorer({
   players,
   teams,
   performances,
+  initialTeamId = "all",
 }: StatsExplorerProps) {
   const [activeTab, setActiveTab] =
     useState<Tab>("batting");
 
   const [selectedTeamId, setSelectedTeamId] =
-    useState("all");
+    useState(initialTeamId);
 
   const [sortKey, setSortKey] =
     useState<SortKey>("runs");

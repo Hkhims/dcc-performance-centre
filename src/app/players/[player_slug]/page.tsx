@@ -576,14 +576,16 @@ export default async function PlayerProfilePage({
   const cameFromFun = requestedFromFun === "1";
 
   const backHref = requestedFromMatch
-    ? `/matches/${requestedFromMatch}`
-    : contextTeam
-      ? `/teams/${contextTeam.team_id}`
-      : cameFromFun
-        ? "/stats/fun"
-        : cameFromStats
-          ? "/stats#player-stats"
-          : "/players";
+  ? `/matches/${requestedFromMatch}`
+  : contextTeam
+    ? `/teams/${contextTeam.team_id}`
+    : cameFromFun
+      ? "/stats/fun"
+      : cameFromStats
+        ? selectedTeamId
+          ? `/stats?team=${selectedTeamId}#player-stats`
+          : "/stats#player-stats"
+        : "/players";
 
   const backLabel = requestedFromMatch
     ? "Back to match"

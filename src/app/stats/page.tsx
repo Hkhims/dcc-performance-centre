@@ -22,7 +22,14 @@ function formatMatchDate(date: string | null) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-export default async function StatsPage() {
+export default async function StatsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    team?: string;
+  }>;
+}) {
+  const { team } = await searchParams;
   const [
     matchEntriesResponse,
     matchesResponse,
@@ -129,6 +136,15 @@ export default async function StatsPage() {
 
   const teams =
     teamsResponse.data ?? [];
+  
+    const initialTeamId =
+  team &&
+  teams.some(
+    (availableTeam) =>
+      availableTeam.team_id === team,
+  )
+    ? team
+    : "all";
 
   const playerMap = new Map(
     players.map((player) => [
@@ -945,10 +961,11 @@ export default async function StatsPage() {
 
         {/* PLAYER STATISTICS EXPLORER */}
         <StatsExplorer
-          players={players}
-          teams={teams}
-          performances={performances}
-        />
+  players={players}
+  teams={teams}
+  performances={performances}
+  initialTeamId={initialTeamId}
+/>
 
         {/* MILESTONES */}
         <section
