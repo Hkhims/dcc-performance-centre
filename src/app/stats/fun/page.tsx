@@ -317,6 +317,25 @@ export default async function FunStatsPage() {
     );
   }
 
+  function leadersBy(
+    selector: (
+      player: (typeof aggregatedPlayers)[number],
+    ) => number,
+  ) {
+    if (aggregatedPlayers.length === 0) {
+      return [];
+    }
+
+    const highestValue = Math.max(
+      ...aggregatedPlayers.map(selector),
+    );
+
+    return aggregatedPlayers.filter(
+      (player) =>
+        selector(player) === highestValue,
+    );
+  }
+
   const mostFours = leaderBy(
     (player) => player.fours,
   );
@@ -337,19 +356,21 @@ export default async function FunStatsPage() {
     (player) => player.wides,
   );
 
-  const mostNoBalls = leaderBy(
+  const mostNoBallsLeaders = leadersBy(
     (player) => player.noBalls,
   );
 
-  const mostRunOutDismissals = leaderBy(
-    (player) =>
-      player.runOutDismissals,
-  );
+  const mostRunOutDismissalLeaders =
+    leadersBy(
+      (player) =>
+        player.runOutDismissals,
+    );
 
-  const mostTeamsRepresented = leaderBy(
-    (player) =>
-      player.teamsRepresented.size,
-  );
+  const mostTeamsRepresentedLeaders =
+    leadersBy(
+      (player) =>
+        player.teamsRepresented.size,
+    );
 
   const mostNotOuts = leaderBy(
     (player) => player.notOuts,
@@ -416,19 +437,29 @@ export default async function FunStatsPage() {
           (a.wides ?? 0),
       )[0] ?? null;
 
-  const mostNoBallsSpell =
-    [...performances]
-      .filter(
-        (performance) =>
-          performance.bowled &&
-          (performance.no_balls ?? 0) >
-            0,
-      )
-      .sort(
-        (a, b) =>
-          (b.no_balls ?? 0) -
-          (a.no_balls ?? 0),
-      )[0] ?? null;
+  const noBallPerformances =
+    [...performances].filter(
+      (performance) =>
+        performance.bowled &&
+        (performance.no_balls ?? 0) > 0,
+    );
+
+  const highestNoBallsInMatch =
+    noBallPerformances.length > 0
+      ? Math.max(
+          ...noBallPerformances.map(
+            (performance) =>
+              performance.no_balls ?? 0,
+          ),
+        )
+      : 0;
+
+  const mostNoBallsSpells =
+    noBallPerformances.filter(
+      (performance) =>
+        (performance.no_balls ?? 0) ===
+        highestNoBallsInMatch,
+    );
 
   const quickCameo =
     [...performances]
@@ -552,10 +583,27 @@ export default async function FunStatsPage() {
       widestSpell,
     );
 
-  const mostNoBallsSpellContext =
-    getPerformanceContext(
-      mostNoBallsSpell,
-    );
+  const mostNoBallsSpellContexts =
+    mostNoBallsSpells
+      .map((performance) => ({
+        performance,
+        context:
+          getPerformanceContext(
+            performance,
+          ),
+      }))
+      .filter(
+        (
+          item,
+        ): item is {
+          performance: (typeof performances)[number];
+          context: NonNullable<
+            ReturnType<
+              typeof getPerformanceContext
+            >
+          >;
+        } => item.context !== null,
+      );
 
   const quickCameoContext =
     getPerformanceContext(
@@ -670,17 +718,23 @@ export default async function FunStatsPage() {
     });
   }
 
-  if (mostNoBalls) {
+  if (mostNoBallsLeaders.length > 0) {
+    const leaderValue =
+      mostNoBallsLeaders[0].noBalls;
+
     funStats.push({
       key: "most-no-balls",
       eyebrow: "Front-Foot Department",
       title: "Most No-Balls",
-      playerName:
-        mostNoBalls.player_name,
-      playerSlug:
-        mostNoBalls.player_slug,
-      value:
-        mostNoBalls.noBalls.toString(),
+      players: mostNoBallsLeaders.map(
+        (player) => ({
+          playerName:
+            player.player_name,
+          playerSlug:
+            player.player_slug,
+        }),
+      ),
+      value: leaderValue.toString(),
       unit: "no-balls",
       detail:
         "Every centimetre counts.",
@@ -688,17 +742,29 @@ export default async function FunStatsPage() {
     });
   }
 
-  if (mostRunOutDismissals) {
+  if (
+    mostRunOutDismissalLeaders.length >
+    0
+  ) {
+    const leaderValue =
+      mostRunOutDismissalLeaders[0]
+        .runOutDismissals;
+
     funStats.push({
       key: "most-run-outs",
-      eyebrow: "Communication Breakdown",
+      eyebrow:
+        "Communication Breakdown",
       title: "Most Times Run Out",
-      playerName:
-        mostRunOutDismissals.player_name,
-      playerSlug:
-        mostRunOutDismissals.player_slug,
-      value:
-        mostRunOutDismissals.runOutDismissals.toString(),
+      players:
+        mostRunOutDismissalLeaders.map(
+          (player) => ({
+            playerName:
+              player.player_name,
+            playerSlug:
+              player.player_slug,
+          }),
+        ),
+      value: leaderValue.toString(),
       unit: "run outs",
       detail:
         "Sometimes yes means no. Sometimes two means absolutely not.",
@@ -729,56 +795,76 @@ export default async function FunStatsPage() {
   }
 
   if (
-    mostNoBallsSpell &&
-    mostNoBallsSpellContext
+    mostNoBallsSpellContexts.length > 0
   ) {
+    const leaderValue =
+      mostNoBallsSpellContexts[0]
+        .performance.no_balls ?? 0;
+
+    const tiedPlayers = Array.from(
+      new Map(
+        mostNoBallsSpellContexts.map(
+          ({ context }) => [
+            context.player.player_id,
+            {
+              playerName:
+                context.player
+                  .player_name,
+              playerSlug:
+                context.player
+                  .player_slug,
+            },
+          ],
+        ),
+      ).values(),
+    );
+
+    const matchDetails =
+      mostNoBallsSpellContexts
+        .map(({ context }) => {
+          return `vs ${context.opponent} · ${context.teamName} · ${formatMatchDate(
+            context.matchDate,
+          )}`;
+        })
+        .join(" | ");
+
     funStats.push({
       key: "most-no-balls-match",
       eyebrow: "One-Match Special",
-      title: "Most No-Balls in One Match",
-      playerName:
-        mostNoBallsSpellContext.player
-          .player_name,
-      playerSlug:
-        mostNoBallsSpellContext.player
-          .player_slug,
-      value:
-        (
-          mostNoBallsSpell.no_balls ??
-          0
-        ).toString(),
+      title:
+        "Most No-Balls in One Match",
+      players: tiedPlayers,
+      value: leaderValue.toString(),
       unit: "no-balls",
-      detail: `vs ${mostNoBallsSpellContext.opponent}`,
-      secondaryDetail: `${mostNoBallsSpellContext.teamName} · ${formatMatchDate(
-        mostNoBallsSpellContext.matchDate,
-      )}`,
+      detail: matchDetails,
       tone: "mischief",
     });
   }
 
-  if (mostTeamsRepresented) {
-    const representedTeams =
-      [...mostTeamsRepresented.teamsRepresented]
-        .map(
-          (teamId) =>
-            teamMap.get(teamId) ??
-            teamId,
-        )
-        .join(" · ");
+  if (
+    mostTeamsRepresentedLeaders.length >
+    0
+  ) {
+    const leaderValue =
+      mostTeamsRepresentedLeaders[0]
+        .teamsRepresented.size;
 
     funStats.push({
       key: "most-teams",
       eyebrow: "Have Kit, Will Travel",
       title: "Most Teams Represented",
-      playerName:
-        mostTeamsRepresented.player_name,
-      playerSlug:
-        mostTeamsRepresented.player_slug,
-      value:
-        mostTeamsRepresented.teamsRepresented.size.toString(),
+      players:
+        mostTeamsRepresentedLeaders.map(
+          (player) => ({
+            playerName:
+              player.player_name,
+            playerSlug:
+              player.player_slug,
+          }),
+        ),
+      value: leaderValue.toString(),
       unit: "teams",
-      detail:
-        representedTeams,
+      detail: `${mostTeamsRepresentedLeaders.length} players represented ${leaderValue} teams.`,
     });
   }
 
@@ -786,18 +872,17 @@ export default async function FunStatsPage() {
     funStats.push({
       key: "boundary-percentage",
       eyebrow: "Boundary Addict",
-      title: "Highest Boundary Percentage",
+      title:
+        "Highest Boundary Percentage",
       playerName:
         boundaryPercentageLeader.player_name,
       playerSlug:
         boundaryPercentageLeader.player_slug,
-      value:
-        `${boundaryPercentageLeader.boundaryPercentage.toFixed(
-          1,
-        )}%`,
+      value: `${boundaryPercentageLeader.boundaryPercentage.toFixed(
+        1,
+      )}%`,
       unit: "of runs",
-      detail:
-        `${boundaryPercentageLeader.boundaryRuns} of ${boundaryPercentageLeader.runs} runs came in boundaries.`,
+      detail: `${boundaryPercentageLeader.boundaryRuns} of ${boundaryPercentageLeader.runs} runs came in boundaries.`,
     });
   }
 
@@ -856,7 +941,8 @@ export default async function FunStatsPage() {
     funStats.push({
       key: "most-40s",
       eyebrow: "Nearly There",
-      title: "Most Scores from 40 to 49",
+      title:
+        "Most Scores from 40 to 49",
       playerName:
         mostScores40to49.player_name,
       playerSlug:
@@ -870,11 +956,15 @@ export default async function FunStatsPage() {
     });
   }
 
-  if (quickCameo && quickCameoContext) {
+  if (
+    quickCameo &&
+    quickCameoContext
+  ) {
     funStats.push({
       key: "quick-cameo",
       eyebrow: "Quick Cameo",
-      title: "Highest Innings Strike Rate",
+      title:
+        "Highest Innings Strike Rate",
       playerName:
         quickCameoContext.player
           .player_name,
@@ -918,8 +1008,8 @@ export default async function FunStatsPage() {
       detail: `${
         mostExpensiveSpell.wickets ?? 0
       } wicket${
-        (mostExpensiveSpell.wickets ?? 0) ===
-        1
+        (mostExpensiveSpell.wickets ??
+          0) === 1
           ? ""
           : "s"
       } · ${Math.floor(
@@ -950,7 +1040,9 @@ export default async function FunStatsPage() {
       playerSlug:
         bestShortSpellContext.player
           .player_slug,
-      value: `${bestShortSpell.wickets ?? 0}/${
+      value: `${
+        bestShortSpell.wickets ?? 0
+      }/${
         bestShortSpell.runs_conceded ?? 0
       }`,
       unit: "bowling",
