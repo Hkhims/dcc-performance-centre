@@ -680,9 +680,11 @@ export default async function TeamDetailPage({
                       ordinal(teamStanding.position),
                     ],
                     [
-                      "League Record",
-                      `${teamStanding.won}-${teamStanding.lost}`,
-                    ],
+  "League Record",
+  teamStanding.tied > 0
+    ? `${teamStanding.won}-${teamStanding.lost}-${teamStanding.tied}`
+    : `${teamStanding.won}-${teamStanding.lost}`,
+],
                     ["Points", teamStanding.points],
                     [
                       "NRR",
