@@ -5,7 +5,7 @@ const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const PROVIDER = "NV Play";
-const SEASON = 2026;
+const DEFAULT_SEASON = new Date().getUTCFullYear();
 const PARSER_VERSION = 3;
 
 type JsonObject = Record<string, unknown>;
@@ -55,6 +55,7 @@ type OwnershipRow = {
 type SpecialCase =
   | "Postponed / No Result"
   | "Forfeit"
+  | "Awarded"
   | null;
 
 type PlayerPerformance = {
@@ -332,9 +333,18 @@ function detectSpecialCase(
   }
 
   if (
-    /unable to field a team/i.test(result)
+    /unable to field a team/i.test(result) ||
+    /\bforfeit(?:ed)?\b/i.test(result) ||
+    /\bwalk[ -]?over\b/i.test(result)
   ) {
     return "Forfeit";
+  }
+
+  if (
+    /\bmatch awarded\b/i.test(result) ||
+    /\bawarded to\b/i.test(result)
+  ) {
+    return "Awarded";
   }
 
   return null;
@@ -735,6 +745,57 @@ Deno.serve(async (req) => {
       );
     }
 
+    let requestedSeason:
+      number | null = null;
+
+    try {
+      const requestBody =
+        await req.json();
+
+      if (
+        requestBody &&
+        typeof requestBody ===
+          "object" &&
+        "season" in requestBody
+      ) {
+        const parsedSeason =
+          Number(
+            (
+              requestBody as Record<
+                string,
+                unknown
+              >
+            ).season,
+          );
+
+        if (
+          !Number.isInteger(
+            parsedSeason,
+          ) ||
+          parsedSeason < 2000 ||
+          parsedSeason > 2100
+        ) {
+          return jsonResponse(
+            {
+              success: false,
+              error:
+                "Invalid season",
+            },
+            400,
+          );
+        }
+
+        requestedSeason =
+          parsedSeason;
+      }
+    } catch {
+      // Empty request body is valid.
+    }
+
+    const targetSeason =
+      requestedSeason ??
+      DEFAULT_SEASON;
+
     if (
       !SUPABASE_URL ||
       !SUPABASE_SERVICE_ROLE_KEY
@@ -784,7 +845,7 @@ Deno.serve(async (req) => {
         )
         .eq(
           "season",
-          SEASON,
+          targetSeason,
         )
         .eq(
           "status",
@@ -1018,7 +1079,7 @@ Deno.serve(async (req) => {
         )
         .eq(
           "season",
-          SEASON,
+          targetSeason,
         );
 
     if (
@@ -1171,7 +1232,7 @@ Deno.serve(async (req) => {
 
         if (
           externalMatch.season !==
-          SEASON
+          targetSeason
         ) {
           continue;
         }
@@ -1218,7 +1279,11 @@ Deno.serve(async (req) => {
           inningsArray.length ===
             0 &&
           specialCase !==
-            "Postponed / No Result"
+            "Postponed / No Result" &&
+          specialCase !==
+            "Forfeit" &&
+          specialCase !==
+            "Awarded"
         ) {
           raiseValidation(
             validation,
@@ -1422,7 +1487,9 @@ Deno.serve(async (req) => {
             inningsArray.length >
               0 &&
             specialCase !==
-              "Forfeit"
+              "Forfeit" &&
+            specialCase !==
+              "Awarded"
           ) {
             raiseValidation(
               validation,
@@ -2036,6 +2103,48 @@ Deno.serve(async (req) => {
                 dismissal.Fielders,
               );
 
+            const uniqueFielders: JsonObject[] =
+              [];
+
+            const seenFielderExternalIds =
+              new Set<string>();
+
+            for (
+              const fielderValue
+              of fielders
+            ) {
+              const fielder =
+                asObject(
+                  fielderValue,
+                );
+
+              if (!fielder) {
+                continue;
+              }
+
+              const fielderExternalId =
+                asString(
+                  fielder.Id,
+                );
+
+              if (
+                !fielderExternalId ||
+                seenFielderExternalIds.has(
+                  fielderExternalId,
+                )
+              ) {
+                continue;
+              }
+
+              seenFielderExternalIds.add(
+                fielderExternalId,
+              );
+
+              uniqueFielders.push(
+                fielder,
+              );
+            }
+
             let caughtAndBowled =
               false;
 
@@ -2047,7 +2156,7 @@ Deno.serve(async (req) => {
             ) {
               for (
                 const fielderValue
-                of fielders
+                of uniqueFielders
               ) {
                 const fielder =
                   asObject(
@@ -2102,7 +2211,7 @@ Deno.serve(async (req) => {
 
             for (
               const fielderValue
-              of fielders
+              of uniqueFielders
             ) {
               const fielder =
                 asObject(
@@ -2164,13 +2273,8 @@ Deno.serve(async (req) => {
                 dismissalTypeKey ===
                 "caught"
               ) {
-                if (
-                  fielderExternalId !==
-                  bowlerExternalId
-                ) {
-                  fieldingPerformance.catches +=
-                    1;
-                }
+                fieldingPerformance.catches +=
+                  1;
               } else if (
                 dismissalTypeKey ===
                 "stumped"
@@ -2194,7 +2298,9 @@ Deno.serve(async (req) => {
           inningsArray.length >
             0 &&
           specialCase !==
-            "Forfeit"
+            "Forfeit" &&
+          specialCase !==
+            "Awarded"
         ) {
           raiseValidation(
             validation,
@@ -2224,7 +2330,7 @@ Deno.serve(async (req) => {
 
             match: {
               season:
-                SEASON,
+                targetSeason,
 
               match_date:
                 dateOnly(
@@ -2296,7 +2402,7 @@ Deno.serve(async (req) => {
 
             publication_policy: {
               season:
-                SEASON,
+                targetSeason,
 
               mode:
                 "Reconciliation Only",
@@ -2417,7 +2523,7 @@ Deno.serve(async (req) => {
           PARSER_VERSION,
 
         season:
-          SEASON,
+          targetSeason,
 
         snapshotsSeen,
 
@@ -2433,7 +2539,7 @@ Deno.serve(async (req) => {
 
         failures,
 
-        canonical2026Protected:
+        canonicalTablesProtected:
           true,
       },
     );
