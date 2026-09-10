@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY =
 
 const PROVIDER = "NV Play";
 const DEFAULT_SEASON = new Date().getUTCFullYear();
-const PARSER_VERSION = 3;
+const PARSER_VERSION = 4;
 
 type JsonObject = Record<string, unknown>;
 
@@ -27,6 +27,7 @@ type ExternalMatchRow = {
   start_datetime: string | null;
   match_status: string | null;
   is_complete: boolean;
+  canonical_match_id: string | null;
 };
 
 type CompetitionMapping = {
@@ -50,6 +51,18 @@ type TeamMapping = {
 type OwnershipRow = {
   external_match_id: number;
   team_id: string;
+};
+
+type CanonicalMatchRow = {
+  match_id: string;
+  season: number;
+  match_date: string | null;
+};
+
+type CanonicalTeamEntryRow = {
+  match_id: string;
+  team_id: string;
+  competition_id: string;
 };
 
 type SpecialCase =
@@ -298,6 +311,442 @@ function dateOnly(
   return parsed
     .toISOString()
     .slice(0, 10);
+}
+
+function canonicalMatchId(
+  externalMatch: ExternalMatchRow,
+  reconciledMatchId: string | null,
+): string {
+  const existing =
+    externalMatch.canonical_match_id
+      ?.trim();
+
+  if (existing) {
+    return existing;
+  }
+
+  if (
+    reconciledMatchId
+  ) {
+    return reconciledMatchId;
+  }
+
+  return (
+    `M${externalMatch.season}-NV-` +
+    externalMatch.external_match_id
+  );
+}
+
+function sourceMatchId(
+  matchId: string,
+  teamId: string,
+): string {
+  return `${matchId}:${teamId}`;
+}
+
+function fixtureLabel(
+  team1Name: string | null,
+  team2Name: string | null,
+): string {
+  if (
+    team1Name &&
+    team2Name
+  ) {
+    return `${team1Name} vs ${team2Name}`;
+  }
+
+  return (
+    team1Name ??
+    team2Name ??
+    "DCC Match"
+  );
+}
+
+function classifyStats(
+  competitionName: string | null,
+): {
+  category:
+    | "Official Season"
+    | "Friendly"
+    | "Warm-up"
+    | "Internal";
+  official_season_eligible: boolean;
+} {
+  const normalised =
+    normaliseName(
+      competitionName,
+    ) ?? "";
+
+  if (
+    /\binternal\b/.test(
+      normalised,
+    )
+  ) {
+    return {
+      category:
+        "Internal",
+
+      official_season_eligible:
+        false,
+    };
+  }
+
+  if (
+    /\bwarm[ -]?up\b/.test(
+      normalised,
+    )
+  ) {
+    return {
+      category:
+        "Warm-up",
+
+      official_season_eligible:
+        false,
+    };
+  }
+
+  if (
+    /\bfriendly\b/.test(
+      normalised,
+    )
+  ) {
+    return {
+      category:
+        "Friendly",
+
+      official_season_eligible:
+        false,
+    };
+  }
+
+  return {
+    category:
+      "Official Season",
+
+    official_season_eligible:
+      true,
+  };
+}
+
+function normaliseScorecard(
+  inningsArray: unknown[],
+): JsonObject {
+  const innings:
+    JsonObject[] = [];
+
+  for (
+    let inningsIndex = 0;
+    inningsIndex <
+      inningsArray.length;
+    inningsIndex += 1
+  ) {
+    const inningsObject =
+      asObject(
+        inningsArray[
+          inningsIndex
+        ],
+      );
+
+    if (
+      !inningsObject
+    ) {
+      continue;
+    }
+
+    const battingRows:
+      JsonObject[] = [];
+
+    for (
+      const batterValue
+      of asArray(
+        inningsObject.BattingCard,
+      )
+    ) {
+      const batter =
+        asObject(
+          batterValue,
+        );
+
+      if (
+        !batter ||
+        asBoolean(
+          batter.IsSummary,
+        ) === true
+      ) {
+        continue;
+      }
+
+      const dismissal =
+        asObject(
+          batter.Dismissal,
+        );
+
+      const dismissalFielders =
+        dismissal
+          ? asArray(
+              dismissal.Fielders,
+            )
+          : [];
+
+      const fielders:
+        JsonObject[] = [];
+
+      const seenFielderIds =
+        new Set<string>();
+
+      for (
+        const fielderValue
+        of dismissalFielders
+      ) {
+        const fielder =
+          asObject(
+            fielderValue,
+          );
+
+        if (
+          !fielder
+        ) {
+          continue;
+        }
+
+        const externalPlayerId =
+          asString(
+            fielder.Id,
+          );
+
+        if (
+          externalPlayerId &&
+          seenFielderIds.has(
+            externalPlayerId,
+          )
+        ) {
+          continue;
+        }
+
+        if (
+          externalPlayerId
+        ) {
+          seenFielderIds.add(
+            externalPlayerId,
+          );
+        }
+
+        fielders.push(
+          {
+            external_player_id:
+              externalPlayerId,
+
+            player_name:
+              asString(
+                fielder.DisplayName,
+              ) ??
+              asString(
+                fielder.PlayerName,
+              ) ??
+              asString(
+                fielder.Name,
+              ),
+          },
+        );
+      }
+
+      battingRows.push(
+        {
+          external_player_id:
+            asString(
+              batter.Id,
+            ),
+
+          player_name:
+            asString(
+              batter.PlayerName,
+            ) ??
+            asString(
+              batter.Name,
+            ),
+
+          has_batted:
+            asBoolean(
+              batter.HasBatted,
+            ) ?? false,
+
+          batting_position:
+            battingRows.length +
+            1,
+
+          runs:
+            asInteger(
+              batter.Runs,
+            ),
+
+          balls:
+            asInteger(
+              batter.Balls,
+            ),
+
+          fours:
+            asInteger(
+              batter.Fours,
+            ),
+
+          sixes:
+            asInteger(
+              batter.Sixes,
+            ),
+
+          is_dismissed:
+            asBoolean(
+              batter.IsDismissed,
+            ),
+
+          dismissal:
+            dismissal
+              ? {
+                  type:
+                    normaliseDismissalType(
+                      asString(
+                        dismissal.Type,
+                      ),
+                    ),
+
+                  bowler_external_player_id:
+                    asString(
+                      dismissal.BowlerId,
+                    ),
+
+                  fielders,
+                }
+              : null,
+        },
+      );
+    }
+
+    const bowlingRows:
+      JsonObject[] = [];
+
+    for (
+      const bowlerValue
+      of asArray(
+        inningsObject.BowlingCard,
+      )
+    ) {
+      const bowler =
+        asObject(
+          bowlerValue,
+        );
+
+      if (
+        !bowler
+      ) {
+        continue;
+      }
+
+      bowlingRows.push(
+        {
+          external_player_id:
+            asString(
+              bowler.Id,
+            ),
+
+          player_name:
+            asString(
+              bowler.PlayerName,
+            ) ??
+            asString(
+              bowler.Name,
+            ),
+
+          overs:
+            asString(
+              bowler.Overs,
+            ) ??
+            (
+              asNumber(
+                bowler.Overs,
+              ) !== null
+                ? String(
+                    asNumber(
+                      bowler.Overs,
+                    ),
+                  )
+                : null
+            ),
+
+          legal_balls:
+            oversToLegalBalls(
+              bowler.Overs,
+            ),
+
+          maidens:
+            asInteger(
+              bowler.Maidens,
+            ),
+
+          runs:
+            asInteger(
+              bowler.Runs,
+            ),
+
+          wickets:
+            asInteger(
+              bowler.Wickets,
+            ),
+
+          wides:
+            asInteger(
+              bowler.Wides,
+            ),
+
+          no_balls:
+            asInteger(
+              bowler.NoBalls,
+            ),
+        },
+      );
+    }
+
+    innings.push(
+      {
+        innings_number:
+          inningsIndex + 1,
+
+        batting_team_name:
+          asString(
+            inningsObject.BattingTeamName,
+          ),
+
+        total_runs:
+          asInteger(
+            inningsObject.TotalRuns,
+          ),
+
+        total_wickets:
+          asInteger(
+            inningsObject.TotalWickets,
+          ),
+
+        total_balls:
+          asInteger(
+            inningsObject.TotalBalls,
+          ),
+
+        batting:
+          battingRows,
+
+        bowling:
+          bowlingRows,
+
+        extras:
+          asObject(
+            inningsObject.Extras,
+          ),
+      },
+    );
+  }
+
+  return {
+    innings,
+  };
 }
 
 function detectSpecialCase(
@@ -1070,7 +1519,8 @@ Deno.serve(async (req) => {
           external_away_team_name,
           start_datetime,
           match_status,
-          is_complete
+          is_complete,
+          canonical_match_id
           `,
         )
         .eq(
@@ -1107,6 +1557,141 @@ Deno.serve(async (req) => {
       externalMatchMap.set(
         match.id,
         match,
+      );
+    }
+
+    // =====================================================
+    // Existing canonical match lookup
+    //
+    // This protects audited historical seasons and also
+    // prevents duplicate canonical matches when an external
+    // match already corresponds to a DCC match.
+    // =====================================================
+
+    currentStage =
+      "loading canonical match lookup";
+
+    const canonicalMatchResult =
+      await supabase
+        .from(
+          "matches",
+        )
+        .select(
+          "match_id, season, match_date",
+        )
+        .eq(
+          "season",
+          targetSeason,
+        );
+
+    if (
+      canonicalMatchResult.error
+    ) {
+      throw new Error(
+        canonicalMatchResult.error.message,
+      );
+    }
+
+    const canonicalMatches =
+      (canonicalMatchResult.data ??
+        []) as CanonicalMatchRow[];
+
+    const canonicalMatchIds =
+      new Set(
+        canonicalMatches.map(
+          (match) =>
+            match.match_id,
+        ),
+      );
+
+    const canonicalDateByMatchId =
+      new Map<
+        string,
+        string | null
+      >();
+
+    for (
+      const match
+      of canonicalMatches
+    ) {
+      canonicalDateByMatchId.set(
+        match.match_id,
+        match.match_date,
+      );
+    }
+
+    const canonicalTeamEntryResult =
+      await supabase
+        .from(
+          "match_team_entries",
+        )
+        .select(
+          "match_id, team_id, competition_id",
+        );
+
+    if (
+      canonicalTeamEntryResult.error
+    ) {
+      throw new Error(
+        canonicalTeamEntryResult.error.message,
+      );
+    }
+
+    const canonicalTeamEntries =
+      (
+        canonicalTeamEntryResult.data ??
+        []
+      ) as CanonicalTeamEntryRow[];
+
+    const canonicalLookup =
+      new Map<
+        string,
+        Set<string>
+      >();
+
+    for (
+      const entry
+      of canonicalTeamEntries
+    ) {
+      if (
+        !canonicalMatchIds.has(
+          entry.match_id,
+        )
+      ) {
+        continue;
+      }
+
+      const matchDate =
+        canonicalDateByMatchId.get(
+          entry.match_id,
+        );
+
+      if (
+        !matchDate
+      ) {
+        continue;
+      }
+
+      const lookupKey =
+        [
+          entry.team_id,
+          matchDate,
+          entry.competition_id,
+        ].join("|");
+
+      const ids =
+        canonicalLookup.get(
+          lookupKey,
+        ) ??
+        new Set<string>();
+
+      ids.add(
+        entry.match_id,
+      );
+
+      canonicalLookup.set(
+        lookupKey,
+        ids,
       );
     }
 
@@ -1395,6 +1980,128 @@ Deno.serve(async (req) => {
           );
         }
 
+        const externalMatchDate =
+          dateOnly(
+            externalMatch.start_datetime,
+          );
+
+        let reconciledMatchId:
+          string | null = null;
+
+        if (
+          !externalMatch.canonical_match_id &&
+          externalMatchDate &&
+          competitionMapping
+        ) {
+          let candidateIds:
+            Set<string> | null =
+              null;
+
+          for (
+            const teamId
+            of ownedTeamIds
+          ) {
+            const lookupKey =
+              [
+                teamId,
+                externalMatchDate,
+                competitionMapping.competition_id,
+              ].join("|");
+
+            const teamCandidates =
+              canonicalLookup.get(
+                lookupKey,
+              ) ??
+              new Set<string>();
+
+            if (
+              candidateIds ===
+              null
+            ) {
+              candidateIds =
+                new Set(
+                  teamCandidates,
+                );
+
+              continue;
+            }
+
+            candidateIds =
+              new Set(
+                Array.from(
+                  candidateIds,
+                ).filter(
+                  (matchId) =>
+                    teamCandidates.has(
+                      matchId,
+                    ),
+                ),
+              );
+          }
+
+          const candidates =
+            candidateIds
+              ? Array.from(
+                  candidateIds,
+                )
+              : [];
+
+          if (
+            candidates.length ===
+            1
+          ) {
+            reconciledMatchId =
+              candidates[0];
+          } else if (
+            candidates.length >
+            1
+          ) {
+            raiseValidation(
+              validation,
+              "Review Required",
+              `Multiple canonical matches match ${externalMatchDate} / ${competitionMapping.competition_id}`,
+            );
+          }
+        }
+
+        const publishedMatchId =
+          canonicalMatchId(
+            externalMatch,
+            reconciledMatchId,
+          );
+
+        const publishedFixtureLabel =
+          fixtureLabel(
+            team1Name,
+            team2Name,
+          );
+
+        const mappedCompetitionName =
+          competitionMapping
+            ?.external_competition_name ??
+          externalMatch.external_competition_name;
+
+        const statsClassification =
+          classifyStats(
+            mappedCompetitionName,
+          );
+
+        /*
+         * IMPORTANT:
+         *
+         * A DCC-v-DCC fixture is NOT automatically an
+         * Internal match. Official cup fixtures between
+         * two DCC teams remain official season matches.
+         *
+         * NV Play imports therefore do not infer
+         * is_internal_dcc_match from team ownership.
+         * Genuine internal/practice matches must be
+         * classified explicitly through their competition.
+         */
+        const isInternalDccMatch =
+          statsClassification.category ===
+          "Internal";
+
         // =================================================
         // Innings lookup
         // =================================================
@@ -1498,8 +2205,17 @@ Deno.serve(async (req) => {
             );
           }
 
+          const teamSourceMatchId =
+            sourceMatchId(
+              publishedMatchId,
+              dccTeam.team_id,
+            );
+
           parsedTeamEntries.push(
             {
+              source_match_id:
+                teamSourceMatchId,
+
               team_id:
                 dccTeam.team_id,
 
@@ -1570,6 +2286,12 @@ Deno.serve(async (req) => {
                       opponentInnings.TotalBalls,
                     )
                   : null,
+
+              opponent_id:
+                null,
+
+              match_notes:
+                specialCase,
             },
           );
         }
@@ -1980,7 +2702,7 @@ Deno.serve(async (req) => {
               );
 
             /*
-             * IMPORTANT — Parser v3
+             * IMPORTANT — Parser v4
              *
              * NV Play's BowlingCard.Balls can include
              * recorded delivery events that do not equal
@@ -2309,6 +3031,161 @@ Deno.serve(async (req) => {
           );
         }
 
+        const dccPlayers =
+          Array.from(
+            performanceMap.values(),
+          )
+            .sort(
+              (a, b) =>
+                a.team_id.localeCompare(
+                  b.team_id,
+                ) ||
+                a.player_id.localeCompare(
+                  b.player_id,
+                ),
+            )
+            .map(
+              (
+                performance,
+              ) => ({
+                source_match_id:
+                  sourceMatchId(
+                    publishedMatchId,
+                    performance.team_id,
+                  ),
+
+                player_id:
+                  performance.player_id,
+
+                team_id:
+                  performance.team_id,
+
+                batted:
+                  performance.batted,
+
+                batting_position:
+                  performance.batting_position,
+
+                runs:
+                  performance.runs,
+
+                balls_faced:
+                  performance.balls_faced,
+
+                fours:
+                  performance.fours,
+
+                sixes:
+                  performance.sixes,
+
+                dismissal_type:
+                  performance.dismissal_type,
+
+                is_not_out:
+                  performance.is_not_out,
+
+                bowled:
+                  performance.bowled,
+
+                bowling_balls:
+                  performance.bowling_balls,
+
+                maidens:
+                  performance.maidens,
+
+                runs_conceded:
+                  performance.runs_conceded,
+
+                wickets:
+                  performance.wickets,
+
+                wides:
+                  performance.wides,
+
+                no_balls:
+                  performance.no_balls,
+
+                wickets_bowled:
+                  performance.wickets_bowled,
+
+                wickets_caught:
+                  performance.wickets_caught,
+
+                wickets_lbw:
+                  performance.wickets_lbw,
+
+                wickets_stumped:
+                  performance.wickets_stumped,
+
+                wickets_caught_and_bowled:
+                  performance.wickets_caught_and_bowled,
+
+                wickets_hit_wicket:
+                  performance.wickets_hit_wicket,
+
+                catches:
+                  performance.catches,
+
+                stumpings:
+                  performance.stumpings,
+
+                run_outs:
+                  performance.run_outs,
+
+                performance_notes:
+                  performance.parser_notes.length >
+                    0
+                    ? performance.parser_notes.join(
+                        " | ",
+                      )
+                    : null,
+
+                source_identity: {
+                  provider:
+                    PROVIDER,
+
+                  external_player_ids:
+                    performance.external_player_ids,
+
+                  external_player_name:
+                    performance.external_player_name,
+                },
+              }),
+            );
+
+        const normalisedScorecard =
+          {
+            ...normaliseScorecard(
+              inningsArray,
+            ),
+
+            teams: {
+              home:
+                team1Name,
+
+              away:
+                team2Name,
+            },
+
+            result_text:
+              matchObject
+                ? asString(
+                    matchObject.Result,
+                  )
+                : null,
+
+            source: {
+              provider:
+                PROVIDER,
+
+              snapshot_id:
+                snapshot.id,
+
+              external_match_id:
+                externalMatch.external_match_id,
+            },
+          };
+
         const parsedPayload =
           {
             parser_version:
@@ -2329,13 +3206,33 @@ Deno.serve(async (req) => {
             },
 
             match: {
+              match_id:
+                publishedMatchId,
+
               season:
                 targetSeason,
 
               match_date:
-                dateOnly(
-                  externalMatch.start_datetime,
-                ),
+                externalMatchDate,
+
+              fixture_label:
+                publishedFixtureLabel,
+
+              status:
+                specialCase ===
+                  "Awarded"
+                  ? "Awarded"
+                  : (
+                      externalMatch.is_complete
+                        ? "Completed"
+                        : (
+                            externalMatch.match_status ??
+                            "Scheduled"
+                          )
+                    ),
+
+              is_internal_dcc_match:
+                isInternalDccMatch,
 
               external_competition_id:
                 externalCompetitionId,
@@ -2346,18 +3243,13 @@ Deno.serve(async (req) => {
                 null,
 
               competition_name:
-                competitionMapping
-                  ?.external_competition_name ??
-                externalMatch.external_competition_name,
+                mappedCompetitionName,
 
               home_team:
                 team1Name,
 
               away_team:
                 team2Name,
-
-              match_status:
-                externalMatch.match_status,
 
               is_complete:
                 externalMatch.is_complete,
@@ -2374,23 +3266,33 @@ Deno.serve(async (req) => {
 
               special_case:
                 specialCase,
+
+              canonical_match_resolution:
+                externalMatch.canonical_match_id
+                  ? "Existing External Link"
+                  : (
+                      reconciledMatchId
+                        ? "Canonical Team/Date/Competition Match"
+                        : "New Canonical Match"
+                    ),
             },
 
             team_entries:
               parsedTeamEntries,
 
-            player_performances:
-              Array.from(
-                performanceMap.values(),
-              ).sort(
-                (a, b) =>
-                  a.team_id.localeCompare(
-                    b.team_id,
-                  ) ||
-                  a.player_id.localeCompare(
-                    b.player_id,
-                  ),
-              ),
+            dcc_players:
+              dccPlayers,
+
+            scorecard:
+              normalisedScorecard,
+
+            stats: {
+              category:
+                statsClassification.category,
+
+              official_season_eligible:
+                statsClassification.official_season_eligible,
+            },
 
             validation: {
               status:
