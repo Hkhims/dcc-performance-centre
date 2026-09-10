@@ -3350,7 +3350,9 @@ Deno.serve(async (req) => {
                 import_status:
                   importStatus,
               },
-            );
+            )
+            .select("id")
+            .single();
 
         if (
           insertResult.error
@@ -3358,6 +3360,30 @@ Deno.serve(async (req) => {
           throw new Error(
             insertResult.error.message,
           );
+        }
+
+        if (
+          validation.status ===
+            "Review Required" &&
+          insertResult.data?.id
+        ) {
+          const notificationResult =
+            await supabase.rpc(
+              "notify_match_import_review",
+              {
+                target_match_import_id:
+                  insertResult.data.id,
+              },
+            );
+
+          if (
+            notificationResult.error
+          ) {
+            console.error(
+              "Failed to create match import review notification:",
+              notificationResult.error.message,
+            );
+          }
         }
 
         importsCreated +=
