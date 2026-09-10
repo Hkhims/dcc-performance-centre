@@ -526,13 +526,13 @@ Deno.serve(async (req) => {
     const mappings =
       mappingResponse.data ?? [];
 
-    if (mappings.length !== 6) {
+    if (mappings.length === 0) {
       return jsonResponse(
         {
           success: false,
           stage: currentStage,
           error:
-            "Expected exactly six confirmed NV Play team mappings",
+            "No confirmed NV Play team mappings found",
           mappingCount:
             mappings.length,
         },
