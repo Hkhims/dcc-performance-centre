@@ -3363,8 +3363,10 @@ Deno.serve(async (req) => {
         }
 
         if (
-          validation.status ===
-            "Review Required" &&
+          (
+            validation.status === "Review Required" ||
+            validation.status === "Blocked"
+          ) &&
           insertResult.data?.id
         ) {
           const notificationResult =
