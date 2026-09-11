@@ -54,7 +54,11 @@ type ExternalMatch = {
 type ParsedPayload = {
   parser_version?: number;
   match?: {
+    match_id?: string;
     season?: number;
+    fixture_label?: string;
+    status?: string;
+    is_internal_dcc_match?: boolean;
     away_team?: string;
     home_team?: string;
     match_date?: string;
@@ -79,9 +83,16 @@ type ParsedPayload = {
   };
   team_entries?: TeamEntry[];
   player_performances?: PlayerPerformance[];
+  dcc_players?: PlayerPerformance[];
+  scorecard?: Record<string, unknown>;
+  stats?: {
+    category?: string;
+    official_season_eligible?: boolean;
+  };
 };
 
 type TeamEntry = {
+  source_match_id?: string;
   result?: string;
   team_id?: string;
   dcc_balls?: number | null;
@@ -89,14 +100,17 @@ type TeamEntry = {
   dcc_wickets?: number | null;
   revised_overs?: number | null;
   competition_id?: string;
+  opponent_id?: string | null;
   opponent_balls?: number | null;
   opponent_score?: number | null;
   scheduled_overs?: number | null;
   opponent_wickets?: number | null;
   opponent_display_name?: string;
+  match_notes?: string | null;
 };
 
 type PlayerPerformance = {
+  source_match_id?: string;
   runs?: number | null;
   fours?: number | null;
   sixes?: number | null;
@@ -239,6 +253,128 @@ function validationClasses(
   return "border-amber-400/25 bg-amber-400/10 text-amber-300";
 }
 
+function isMutableRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function applyValueAtJsonPath(
+  root: unknown,
+  path: string[],
+  value: unknown,
+) {
+  if (path.length === 0) {
+    return false;
+  }
+
+  let current: unknown = root;
+
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const segment = path[index];
+
+    if (Array.isArray(current)) {
+      const arrayIndex = Number(segment);
+
+      if (
+        !Number.isInteger(arrayIndex) ||
+        arrayIndex < 0 ||
+        arrayIndex >= current.length
+      ) {
+        return false;
+      }
+
+      current = current[arrayIndex];
+      continue;
+    }
+
+    if (isMutableRecord(current)) {
+      if (!(segment in current)) {
+        return false;
+      }
+
+      current = current[segment];
+      continue;
+    }
+
+    return false;
+  }
+
+  const finalSegment = path[path.length - 1];
+
+  if (Array.isArray(current)) {
+    const arrayIndex = Number(finalSegment);
+
+    if (
+      !Number.isInteger(arrayIndex) ||
+      arrayIndex < 0 ||
+      arrayIndex >= current.length
+    ) {
+      return false;
+    }
+
+    current[arrayIndex] = value;
+    return true;
+  }
+
+  if (isMutableRecord(current)) {
+    if (!(finalSegment in current)) {
+      return false;
+    }
+
+    current[finalSegment] = value;
+    return true;
+  }
+
+  return false;
+}
+
+function buildReviewedPayload(
+  payload: ParsedPayload,
+  corrections: Correction[],
+) {
+  const reviewedPayload = JSON.parse(
+    JSON.stringify(payload),
+  ) as ParsedPayload;
+
+  const activeCorrections = corrections
+    .filter(
+      (correction) =>
+        correction.status === "Active" &&
+        Array.isArray(correction.json_path) &&
+        correction.json_path.length > 0,
+    )
+    .sort((a, b) => a.id - b.id);
+
+  const unappliedCorrectionIds: number[] = [];
+
+  for (const correction of activeCorrections) {
+    const applied = applyValueAtJsonPath(
+      reviewedPayload,
+      correction.json_path ?? [],
+      correction.corrected_value,
+    );
+
+    if (!applied) {
+      unappliedCorrectionIds.push(correction.id);
+    }
+  }
+
+  return {
+    reviewedPayload,
+    activeCorrections,
+    unappliedCorrectionIds,
+  };
+}
+
+function valuesDiffer(a: unknown, b: unknown) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
 export default async function MatchReviewPage({
   params,
 }: {
@@ -325,6 +461,7 @@ export default async function MatchReviewPage({
       .select("id, created_at")
       .eq("external_match_id", matchImport.external_match_id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -388,7 +525,8 @@ export default async function MatchReviewPage({
         `,
       )
       .eq("match_import_id", matchImport.id)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
 
   if (correctionError) {
     throw new Error(
@@ -404,7 +542,20 @@ export default async function MatchReviewPage({
   const publicationPolicy =
     payload.publication_policy ?? {};
   const teamEntries = payload.team_entries ?? [];
-  const performances = payload.player_performances ?? [];
+
+  const {
+    reviewedPayload,
+    activeCorrections,
+    unappliedCorrectionIds,
+  } = buildReviewedPayload(payload, corrections);
+
+  const reviewedTeamEntries =
+    reviewedPayload.team_entries ?? [];
+
+  const performances =
+    payload.player_performances ??
+    payload.dcc_players ??
+    [];
 
   const batting = performances
     .filter((player) => player.batted)
@@ -438,6 +589,20 @@ export default async function MatchReviewPage({
     match.away_team ??
     externalMatch?.external_away_team_name ??
     "Unknown away team";
+
+  const displayedTeamIds =
+    match.dcc_team_ids?.length
+      ? match.dcc_team_ids
+      : Array.from(
+          new Set(
+            teamEntries
+              .map((entry) => entry.team_id)
+              .filter(
+                (teamId): teamId is string =>
+                  Boolean(teamId),
+              ),
+          ),
+        );
 
   return (
     <main className="min-h-screen bg-[#05070d] px-4 py-10 text-white sm:px-6">
@@ -532,6 +697,7 @@ export default async function MatchReviewPage({
             </p>
             <p className="mt-2 text-lg font-semibold">
               {match.match_status ??
+                match.status ??
                 externalMatch?.match_status ??
                 "Unavailable"}
             </p>
@@ -542,8 +708,8 @@ export default async function MatchReviewPage({
               DCC team
             </p>
             <p className="mt-2 text-lg font-semibold">
-              {match.dcc_team_ids?.length
-                ? match.dcc_team_ids
+              {displayedTeamIds.length
+                ? displayedTeamIds
                     .map((teamId) =>
                       teamDisplayName(teamId),
                     )
@@ -600,9 +766,16 @@ export default async function MatchReviewPage({
         </section>
 
         <section className="mt-8">
-          <h2 className="text-2xl font-bold">
-            Match summary
-          </h2>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Match summary
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Imported source values
+              </p>
+            </div>
+          </div>
 
           <div className="mt-4 grid gap-4">
             {teamEntries.map((entry, index) => (
@@ -676,6 +849,260 @@ export default async function MatchReviewPage({
           isLatestImport={isLatestImport}
           importStatus={matchImport.import_status}
         />
+
+        <section className="mt-8 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.055] p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                Reviewed values
+              </p>
+
+              <h2 className="mt-2 text-2xl font-bold">
+                Will publish if approved
+              </h2>
+
+              <p className="mt-3 max-w-4xl leading-7 text-zinc-400">
+                This preview starts with the imported parser payload
+                and applies the currently Active audited correction
+                overlays in correction order. The original imported
+                payload remains unchanged.
+              </p>
+            </div>
+
+            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1 text-xs font-semibold text-emerald-300">
+              {activeCorrections.length} active{" "}
+              {activeCorrections.length === 1
+                ? "correction"
+                : "corrections"}
+            </div>
+          </div>
+
+          {unappliedCorrectionIds.length > 0 ? (
+            <div className="mt-5 rounded-xl border border-red-400/25 bg-red-400/[0.07] p-4 text-sm leading-6 text-red-200">
+              Preview warning: correction{" "}
+              {unappliedCorrectionIds.join(", ")} could not be
+              applied to the imported payload path. Do not approve
+              this import until the correction record is reviewed.
+            </div>
+          ) : null}
+
+          {reviewedTeamEntries.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4 text-zinc-400">
+              No DCC team entries are available for publication.
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4">
+              {reviewedTeamEntries.map(
+                (reviewedEntry, index) => {
+                  const importedEntry =
+                    teamEntries[index];
+
+                  const resultChanged =
+                    valuesDiffer(
+                      importedEntry?.result,
+                      reviewedEntry.result,
+                    );
+
+                  const dccScoreChanged =
+                    valuesDiffer(
+                      importedEntry?.dcc_score,
+                      reviewedEntry.dcc_score,
+                    ) ||
+                    valuesDiffer(
+                      importedEntry?.dcc_wickets,
+                      reviewedEntry.dcc_wickets,
+                    ) ||
+                    valuesDiffer(
+                      importedEntry?.dcc_balls,
+                      reviewedEntry.dcc_balls,
+                    );
+
+                  const opponentScoreChanged =
+                    valuesDiffer(
+                      importedEntry?.opponent_score,
+                      reviewedEntry.opponent_score,
+                    ) ||
+                    valuesDiffer(
+                      importedEntry?.opponent_wickets,
+                      reviewedEntry.opponent_wickets,
+                    ) ||
+                    valuesDiffer(
+                      importedEntry?.opponent_balls,
+                      reviewedEntry.opponent_balls,
+                    );
+
+                  const scheduledChanged =
+                    valuesDiffer(
+                      importedEntry?.scheduled_overs,
+                      reviewedEntry.scheduled_overs,
+                    ) ||
+                    valuesDiffer(
+                      importedEntry?.revised_overs,
+                      reviewedEntry.revised_overs,
+                    );
+
+                  return (
+                    <div
+                      key={`${reviewedEntry.team_id ?? "reviewed-team"}-${index}`}
+                      className="rounded-2xl border border-emerald-400/15 bg-black/10 p-6"
+                    >
+                      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-600">
+                            Team
+                          </p>
+                          <p className="mt-1 font-semibold">
+                            {teamDisplayName(
+                              reviewedEntry.team_id,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-600">
+                            Result
+                          </p>
+                          <p
+                            className={`mt-1 font-semibold ${
+                              resultChanged
+                                ? "text-emerald-300"
+                                : ""
+                            }`}
+                          >
+                            {reviewedEntry.result ?? "—"}
+                          </p>
+
+                          {resultChanged ? (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Imported:{" "}
+                              {importedEntry?.result ?? "—"}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-600">
+                            DCC
+                          </p>
+                          <p
+                            className={`mt-1 font-semibold ${
+                              dccScoreChanged
+                                ? "text-emerald-300"
+                                : ""
+                            }`}
+                          >
+                            {scoreText(
+                              reviewedEntry.dcc_score,
+                              reviewedEntry.dcc_wickets,
+                            )}{" "}
+                            (
+                            {ballsToOvers(
+                              reviewedEntry.dcc_balls,
+                            )}{" "}
+                            ov)
+                          </p>
+
+                          {dccScoreChanged ? (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Imported:{" "}
+                              {scoreText(
+                                importedEntry?.dcc_score,
+                                importedEntry?.dcc_wickets,
+                              )}{" "}
+                              (
+                              {ballsToOvers(
+                                importedEntry?.dcc_balls,
+                              )}{" "}
+                              ov)
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-600">
+                            Opponent
+                          </p>
+                          <p
+                            className={`mt-1 font-semibold ${
+                              opponentScoreChanged
+                                ? "text-emerald-300"
+                                : ""
+                            }`}
+                          >
+                            {scoreText(
+                              reviewedEntry.opponent_score,
+                              reviewedEntry.opponent_wickets,
+                            )}{" "}
+                            (
+                            {ballsToOvers(
+                              reviewedEntry.opponent_balls,
+                            )}{" "}
+                            ov)
+                          </p>
+
+                          {opponentScoreChanged ? (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Imported:{" "}
+                              {scoreText(
+                                importedEntry?.opponent_score,
+                                importedEntry?.opponent_wickets,
+                              )}{" "}
+                              (
+                              {ballsToOvers(
+                                importedEntry?.opponent_balls,
+                              )}{" "}
+                              ov)
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-600">
+                            Scheduled
+                          </p>
+                          <p
+                            className={`mt-1 font-semibold ${
+                              scheduledChanged
+                                ? "text-emerald-300"
+                                : ""
+                            }`}
+                          >
+                            {reviewedEntry.revised_overs ??
+                              reviewedEntry.scheduled_overs ??
+                              "—"}{" "}
+                            overs
+                          </p>
+
+                          {scheduledChanged ? (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Imported:{" "}
+                              {importedEntry?.revised_overs ??
+                                importedEntry?.scheduled_overs ??
+                                "—"}{" "}
+                              overs
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+          )}
+
+          {activeCorrections.length === 0 ? (
+            <p className="mt-5 text-sm text-zinc-500">
+              No Active corrections are currently applied, so these
+              values match the imported payload.
+            </p>
+          ) : (
+            <p className="mt-5 text-sm text-emerald-200/80">
+              Green values differ from the imported source because
+              an Active audited correction is applied.
+            </p>
+          )}
+        </section>
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold">
