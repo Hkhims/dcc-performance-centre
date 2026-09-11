@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import ReviewActions from "./ReviewActions";
 
 type PortalAccess = {
   user_id: string;
@@ -847,6 +848,13 @@ export default async function MatchReviewPage({
           )}
         </section>
 
+        <ReviewActions
+          matchImportId={matchImport.id}
+          validationStatus={matchImport.validation_status}
+          importStatus={matchImport.import_status}
+          isLatestImport={isLatestImport}
+        />
+
         <section className="mt-10">
           <h2 className="text-2xl font-bold">
             Corrections
@@ -945,9 +953,9 @@ export default async function MatchReviewPage({
 
         <section className="mt-10 border-t border-white/10 py-8 text-sm text-zinc-500">
           <p>
-            This page is read-only. Reviewing this screen does not
-            publish, approve, reject or alter canonical DCC
-            statistics.
+            This page is read-only except for explicit review actions.
+            Approval or rejection is performed only through audited
+            backend functions with DCC permission checks.
           </p>
         </section>
       </div>
