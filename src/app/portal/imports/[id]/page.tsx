@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ReviewActions from "./ReviewActions";
+import MatchSummaryCorrections from "./MatchSummaryCorrections";
 
 type PortalAccess = {
   user_id: string;
@@ -667,6 +668,14 @@ export default async function MatchReviewPage({
             ))}
           </div>
         </section>
+
+        <MatchSummaryCorrections
+          matchImportId={matchImport.id}
+          teamEntries={teamEntries}
+          corrections={corrections}
+          isLatestImport={isLatestImport}
+          importStatus={matchImport.import_status}
+        />
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold">
