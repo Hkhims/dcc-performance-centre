@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -151,14 +152,21 @@ export default async function PortalPage() {
             </p>
 
             <h2 className="mt-2 text-2xl font-bold">
-              Match review access ready
+              Match Review Queue
             </h2>
 
             <p className="mt-3 max-w-3xl leading-7 text-zinc-300">
-              This account is authorised to review match
-              imports. The review queue will be connected in
-              the next build step.
+              Review imported matches, inspect validation issues,
+              and approve or reject the latest import before it
+              is published to DCC canonical match data.
             </p>
+
+            <Link
+              href="/portal/imports"
+              className="mt-6 inline-flex rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300"
+            >
+              Open Match Review Queue
+            </Link>
           </section>
         ) : (
           <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
