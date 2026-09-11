@@ -37,7 +37,7 @@ export default async function PortalPage() {
   if (!access || access.account_status !== "Active") {
     return (
       <main className="min-h-screen bg-[#05070d] px-6 py-16 text-white">
-        <div className="mx-auto max-w-3xl">
+        <div className="w-full">
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
               DCC Portal
@@ -78,7 +78,7 @@ export default async function PortalPage() {
 
   return (
     <main className="min-h-screen bg-[#05070d] px-6 py-12 text-white">
-      <div className="mx-auto max-w-6xl">
+      <div className="w-full">
         <header className="flex flex-col gap-6 border-b border-white/10 pb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
