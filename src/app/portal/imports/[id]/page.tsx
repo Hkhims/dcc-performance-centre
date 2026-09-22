@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ReviewActions from "./ReviewActions";
 import MatchSummaryCorrections from "./MatchSummaryCorrections";
+import PlayerPerformanceCorrections from "./PlayerPerformanceCorrections";
 
 type PortalAccess = {
   user_id: string;
@@ -375,6 +376,57 @@ function valuesDiffer(a: unknown, b: unknown) {
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
+function correctionFieldLabel(fieldName: string) {
+  const labels: Record<string, string> = {
+    result: "Result",
+    dcc_score: "DCC score",
+    dcc_wickets: "DCC wickets",
+    dcc_balls: "DCC balls",
+    opponent_score: "Opponent score",
+    opponent_wickets: "Opponent wickets",
+    opponent_balls: "Opponent balls",
+    scheduled_overs: "Scheduled overs",
+    revised_overs: "Revised overs",
+    runs: "Runs",
+    balls_faced: "Balls faced",
+    fours: "Fours",
+    sixes: "Sixes",
+    batting_position: "Batting position",
+    bowling_balls: "Bowling balls",
+    maidens: "Maidens",
+    runs_conceded: "Runs conceded",
+    wickets: "Wickets",
+    wides: "Wides",
+    no_balls: "No balls",
+    catches: "Catches",
+    stumpings: "Stumpings",
+    run_outs: "Run outs",
+  };
+
+  return labels[fieldName] ?? fieldName;
+}
+
+function correctionEntityLabel(
+  correction: Correction,
+  performances: PlayerPerformance[],
+) {
+  if (correction.entity_type === "team_entry") {
+    return teamDisplayName(correction.entity_key);
+  }
+
+  if (correction.entity_type === "player_performance") {
+    const player = performances.find(
+      (performance) =>
+        performance.player_id === correction.entity_key ||
+        performance.external_player_name === correction.entity_key,
+    );
+
+    return player?.external_player_name ?? "Player";
+  }
+
+  return "Match";
+}
+
 export default async function MatchReviewPage({
   params,
 }: {
@@ -552,10 +604,22 @@ export default async function MatchReviewPage({
   const reviewedTeamEntries =
     reviewedPayload.team_entries ?? [];
 
+  const playerPayloadKey:
+    | "dcc_players"
+    | "player_performances" =
+    payload.parser_version === 4
+      ? "dcc_players"
+      : "player_performances";
+
   const performances =
-    payload.player_performances ??
-    payload.dcc_players ??
-    [];
+    playerPayloadKey === "dcc_players"
+      ? payload.dcc_players ?? []
+      : payload.player_performances ?? [];
+
+  const reviewedPerformances =
+    playerPayloadKey === "dcc_players"
+      ? reviewedPayload.dcc_players ?? []
+      : reviewedPayload.player_performances ?? [];
 
   const batting = performances
     .filter((player) => player.batted)
@@ -1091,6 +1155,126 @@ export default async function MatchReviewPage({
             </div>
           )}
 
+          {reviewedPerformances.length > 0 ? (
+            <div className="mt-8">
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Reviewed player values
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Effective player statistics after Active audited
+                  corrections are applied.
+                </p>
+              </div>
+
+              <div className="mt-4 overflow-x-auto rounded-xl border border-emerald-400/15 bg-black/10">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white/[0.035] text-left text-xs uppercase tracking-[0.14em] text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-3">Player</th>
+                      <th className="px-4 py-3 text-right">R</th>
+                      <th className="px-4 py-3 text-right">B</th>
+                      <th className="px-4 py-3 text-right">4s</th>
+                      <th className="px-4 py-3 text-right">6s</th>
+                      <th className="px-4 py-3 text-right">O</th>
+                      <th className="px-4 py-3 text-right">M</th>
+                      <th className="px-4 py-3 text-right">RC</th>
+                      <th className="px-4 py-3 text-right">W</th>
+                      <th className="px-4 py-3 text-right">Wd</th>
+                      <th className="px-4 py-3 text-right">NB</th>
+                      <th className="px-4 py-3 text-right">Ct</th>
+                      <th className="px-4 py-3 text-right">St</th>
+                      <th className="px-4 py-3 text-right">RO</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-white/10">
+                    {reviewedPerformances.map(
+                      (reviewedPlayer, index) => {
+                        const importedPlayer =
+                          performances[index];
+
+                        const playerChanged =
+                          valuesDiffer(
+                            importedPlayer,
+                            reviewedPlayer,
+                          );
+
+                        return (
+                          <tr
+                            key={
+                              reviewedPlayer.player_id ??
+                              `${reviewedPlayer.external_player_name ?? "reviewed-player"}-${index}`
+                            }
+                          >
+                            <td
+                              className={`px-4 py-3 font-medium ${
+                                playerChanged
+                                  ? "text-emerald-300"
+                                  : "text-white"
+                              }`}
+                            >
+                              {reviewedPlayer.external_player_name?.trim() ||
+                                `Player ${index + 1}`}
+
+                              {playerChanged ? (
+                                <p className="mt-1 text-xs font-normal text-zinc-500">
+                                  Corrected
+                                </p>
+                              ) : null}
+                            </td>
+
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.runs ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.balls_faced ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.fours ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.sixes ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {ballsToOvers(
+                                reviewedPlayer.bowling_balls,
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.maidens ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.runs_conceded ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.wickets ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.wides ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.no_balls ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.catches ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.stumpings ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {reviewedPlayer.run_outs ?? "—"}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
           {activeCorrections.length === 0 ? (
             <p className="mt-5 text-sm text-zinc-500">
               No Active corrections are currently applied, so these
@@ -1103,6 +1287,15 @@ export default async function MatchReviewPage({
             </p>
           )}
         </section>
+
+        <PlayerPerformanceCorrections
+          matchImportId={matchImport.id}
+          performances={performances}
+          corrections={corrections}
+          playerPayloadKey={playerPayloadKey}
+          isLatestImport={isLatestImport}
+          importStatus={matchImport.import_status}
+        />
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold">
@@ -1318,9 +1511,11 @@ export default async function MatchReviewPage({
                   </div>
 
                   <h3 className="mt-4 text-lg font-semibold">
-                    {correction.entity_type} ·{" "}
-                    {correction.entity_key} ·{" "}
-                    {correction.field_name}
+                    {correctionEntityLabel(
+                      correction,
+                      performances,
+                    )}{" "}
+                    · {correctionFieldLabel(correction.field_name)}
                   </h3>
 
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">

@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createMatchImportCorrection } from "./actions";
+import {
+  createMatchImportCorrection,
+  resolveMatchImportCorrection,
+  supersedeMatchImportCorrection,
+} from "./actions";
 
 type TeamEntry = {
   result?: string;
@@ -22,6 +26,7 @@ type Correction = {
   id: number;
   status: string;
   json_path: string[] | null;
+  corrected_value: unknown;
 };
 
 type Props = {
@@ -128,8 +133,14 @@ export default function MatchSummaryCorrections({
   const [teamEntryIndex, setTeamEntryIndex] = useState(0);
   const [fieldKey, setFieldKey] =
     useState<EditableField["key"]>("result");
+
   const [correctedValue, setCorrectedValue] = useState("");
   const [reason, setReason] = useState("");
+
+  const [replacementValue, setReplacementValue] = useState("");
+  const [replacementReason, setReplacementReason] = useState("");
+  const [resolutionReason, setResolutionReason] = useState("");
+
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<
     "success" | "error" | null
@@ -168,29 +179,90 @@ export default function MatchSummaryCorrections({
       ),
   );
 
+  function resetMessages() {
+    setMessage(null);
+    setMessageType(null);
+  }
+
+  function resetLifecycleInputs() {
+    setReplacementValue("");
+    setReplacementReason("");
+    setResolutionReason("");
+  }
+
+  function resetAllInputs() {
+    setCorrectedValue("");
+    setReason("");
+    resetLifecycleInputs();
+    resetMessages();
+  }
+
   function handleFieldChange(
     event: React.ChangeEvent<HTMLSelectElement>,
   ) {
     setFieldKey(event.target.value as EditableField["key"]);
-    setCorrectedValue("");
-    setReason("");
-    setMessage(null);
-    setMessageType(null);
+    resetAllInputs();
   }
 
   function handleTeamEntryChange(
     event: React.ChangeEvent<HTMLSelectElement>,
   ) {
     setTeamEntryIndex(Number(event.target.value));
-    setCorrectedValue("");
-    setReason("");
-    setMessage(null);
-    setMessageType(null);
+    resetAllInputs();
+  }
+
+  function parseFieldValue(
+    rawValue: string,
+  ):
+    | { ok: true; value: unknown }
+    | { ok: false; message: string } {
+    const trimmedValue = rawValue.trim();
+
+    if (!trimmedValue) {
+      return {
+        ok: false,
+        message: "Please enter the corrected value.",
+      };
+    }
+
+    if (selectedField.type === "number") {
+      const numericValue = Number(trimmedValue);
+
+      if (!Number.isFinite(numericValue)) {
+        return {
+          ok: false,
+          message: "Please enter a valid number.",
+        };
+      }
+
+      if (!Number.isInteger(numericValue)) {
+        return {
+          ok: false,
+          message: "Please enter a whole number.",
+        };
+      }
+
+      if (numericValue < 0) {
+        return {
+          ok: false,
+          message: "The corrected value cannot be negative.",
+        };
+      }
+
+      return {
+        ok: true,
+        value: numericValue,
+      };
+    }
+
+    return {
+      ok: true,
+      value: trimmedValue,
+    };
   }
 
   function runCorrection() {
-    setMessage(null);
-    setMessageType(null);
+    resetMessages();
 
     if (!selectedEntry) {
       setMessage("No DCC team entry is available.");
@@ -214,8 +286,10 @@ export default function MatchSummaryCorrections({
       return;
     }
 
-    if (!correctedValue.trim()) {
-      setMessage("Please enter the corrected value.");
+    const parsedValue = parseFieldValue(correctedValue);
+
+    if (!parsedValue.ok) {
+      setMessage(parsedValue.message);
       setMessageType("error");
       return;
     }
@@ -224,32 +298,6 @@ export default function MatchSummaryCorrections({
       setMessage("Please enter a reason for the correction.");
       setMessageType("error");
       return;
-    }
-
-    let parsedCorrectedValue: unknown = correctedValue.trim();
-
-    if (selectedField.type === "number") {
-      const numericValue = Number(correctedValue);
-
-      if (!Number.isFinite(numericValue)) {
-        setMessage("Please enter a valid number.");
-        setMessageType("error");
-        return;
-      }
-
-      if (!Number.isInteger(numericValue)) {
-        setMessage("Please enter a whole number.");
-        setMessageType("error");
-        return;
-      }
-
-      if (numericValue < 0) {
-        setMessage("The corrected value cannot be negative.");
-        setMessageType("error");
-        return;
-      }
-
-      parsedCorrectedValue = numericValue;
     }
 
     startTransition(async () => {
@@ -261,7 +309,7 @@ export default function MatchSummaryCorrections({
         String(fieldKey),
         jsonPath,
         originalValue,
-        parsedCorrectedValue,
+        parsedValue.value,
         reason,
       );
 
@@ -271,6 +319,90 @@ export default function MatchSummaryCorrections({
       if (result.ok) {
         setCorrectedValue("");
         setReason("");
+        resetLifecycleInputs();
+      }
+    });
+  }
+
+  function runSupersede() {
+    resetMessages();
+
+    if (!activeCorrection) {
+      setMessage(
+        "There is no active correction to replace for this field.",
+      );
+      setMessageType("error");
+      return;
+    }
+
+    const parsedValue = parseFieldValue(replacementValue);
+
+    if (!parsedValue.ok) {
+      setMessage(parsedValue.message);
+      setMessageType("error");
+      return;
+    }
+
+    if (!replacementReason.trim()) {
+      setMessage(
+        "Please enter a reason for replacing the correction.",
+      );
+      setMessageType("error");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await supersedeMatchImportCorrection(
+        matchImportId,
+        activeCorrection.id,
+        parsedValue.value,
+        replacementReason,
+      );
+
+      setMessage(result.message);
+      setMessageType(result.ok ? "success" : "error");
+
+      if (result.ok) {
+        setReplacementValue("");
+        setReplacementReason("");
+        setResolutionReason("");
+      }
+    });
+  }
+
+  function runResolve() {
+    resetMessages();
+
+    if (!activeCorrection) {
+      setMessage(
+        "There is no active correction to resolve for this field.",
+      );
+      setMessageType("error");
+      return;
+    }
+
+    if (!resolutionReason.trim()) {
+      setMessage(
+        "Please enter a reason for resolving the correction.",
+      );
+      setMessageType("error");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await resolveMatchImportCorrection(
+        matchImportId,
+        activeCorrection.id,
+        resolutionReason,
+      );
+
+      setMessage(result.message);
+      setMessageType(result.ok ? "success" : "error");
+
+      if (result.ok) {
+        setReplacementValue("");
+        setReplacementReason("");
+        setResolutionReason("");
       }
     });
   }
@@ -353,49 +485,26 @@ export default function MatchSummaryCorrections({
               </div>
             </div>
 
-            <label className="block">
-              <span className="text-sm font-medium text-zinc-300">
-                Corrected value
-              </span>
+            <div>
+              <p className="text-sm font-medium text-zinc-300">
+                Reviewed value
+              </p>
 
-              <input
-                type={
-                  selectedField.type === "number"
-                    ? "number"
-                    : "text"
-                }
-                min={
-                  selectedField.type === "number"
-                    ? 0
-                    : undefined
-                }
-                step={
-                  selectedField.type === "number"
-                    ? 1
-                    : undefined
-                }
-                value={correctedValue}
-                onChange={(event) =>
-                  setCorrectedValue(event.target.value)
-                }
-                disabled={
-                  isPending ||
-                  Boolean(activeCorrection) ||
-                  originalValue === undefined
-                }
-                placeholder="Enter corrected value"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </label>
-          </div>
-
-          {activeCorrection ? (
-            <div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-sm text-amber-200">
-              This field already has active correction #
-              {activeCorrection.id}. Use the correction history below
-              rather than creating a duplicate correction.
+              <div
+                className={`mt-2 min-h-[46px] rounded-xl border px-4 py-3 text-sm ${
+                  activeCorrection
+                    ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200"
+                    : "border-white/10 bg-black/20 text-zinc-300"
+                }`}
+              >
+                {valueText(
+                  activeCorrection
+                    ? activeCorrection.corrected_value
+                    : originalValue,
+                )}
+              </div>
             </div>
-          ) : null}
+          </div>
 
           {originalValue === undefined ? (
             <div className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.06] p-4 text-sm text-red-200">
@@ -405,41 +514,200 @@ export default function MatchSummaryCorrections({
             </div>
           ) : null}
 
-          <label className="mt-6 block">
-            <span className="text-sm font-medium text-zinc-300">
-              Correction reason
-            </span>
+          {activeCorrection ? (
+            <div className="mt-6 rounded-2xl border border-amber-400/20 bg-black/15 p-5">
+              <div>
+                <p className="text-sm font-semibold text-amber-300">
+                  Active correction #{activeCorrection.id}
+                </p>
 
-            <textarea
-              value={reason}
-              onChange={(event) =>
-                setReason(event.target.value)
-              }
-              disabled={
-                isPending ||
-                Boolean(activeCorrection) ||
-                originalValue === undefined
-              }
-              rows={3}
-              placeholder="Required: explain why the imported value needs to be corrected..."
-              className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </label>
+                <p className="mt-2 text-sm leading-6 text-zinc-400">
+                  This field already has an active correction. You can
+                  replace it with a new reviewed value or resolve it to
+                  return the reviewed value to the imported source.
+                </p>
+              </div>
 
-          <button
-            type="button"
-            onClick={runCorrection}
-            disabled={
-              isPending ||
-              Boolean(activeCorrection) ||
-              originalValue === undefined
-            }
-            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isPending
-              ? "Recording correction..."
-              : "Record correction"}
-          </button>
+              <div className="mt-6 grid gap-6 xl:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.025] p-5">
+                  <h3 className="font-semibold text-white">
+                    Replace correction
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-zinc-500">
+                    Record a new value while preserving this correction
+                    in the audit history as superseded.
+                  </p>
+
+                  <label className="mt-5 block">
+                    <span className="text-sm font-medium text-zinc-300">
+                      New corrected value
+                    </span>
+
+                    <input
+                      type={
+                        selectedField.type === "number"
+                          ? "number"
+                          : "text"
+                      }
+                      min={
+                        selectedField.type === "number"
+                          ? 0
+                          : undefined
+                      }
+                      step={
+                        selectedField.type === "number"
+                          ? 1
+                          : undefined
+                      }
+                      value={replacementValue}
+                      onChange={(event) =>
+                        setReplacementValue(event.target.value)
+                      }
+                      disabled={isPending}
+                      placeholder="Enter replacement value"
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+
+                  <label className="mt-4 block">
+                    <span className="text-sm font-medium text-zinc-300">
+                      Reason for replacement
+                    </span>
+
+                    <textarea
+                      value={replacementReason}
+                      onChange={(event) =>
+                        setReplacementReason(event.target.value)
+                      }
+                      disabled={isPending}
+                      rows={3}
+                      placeholder="Required: explain why the active correction needs to be replaced..."
+                      className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={runSupersede}
+                    disabled={isPending}
+                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isPending
+                      ? "Updating correction..."
+                      : "Replace correction"}
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/[0.025] p-5">
+                  <h3 className="font-semibold text-white">
+                    Resolve correction
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-zinc-500">
+                    Use this when the imported value should stand. The
+                    correction remains in the audit history, but it will
+                    no longer affect the reviewed value.
+                  </p>
+
+                  <label className="mt-5 block">
+                    <span className="text-sm font-medium text-zinc-300">
+                      Resolution reason
+                    </span>
+
+                    <textarea
+                      value={resolutionReason}
+                      onChange={(event) =>
+                        setResolutionReason(event.target.value)
+                      }
+                      disabled={isPending}
+                      rows={3}
+                      placeholder="Required: explain why the imported value should be restored..."
+                      className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={runResolve}
+                    disabled={isPending}
+                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isPending
+                      ? "Resolving correction..."
+                      : "Resolve correction"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <label className="mt-6 block">
+                <span className="text-sm font-medium text-zinc-300">
+                  Corrected value
+                </span>
+
+                <input
+                  type={
+                    selectedField.type === "number"
+                      ? "number"
+                      : "text"
+                  }
+                  min={
+                    selectedField.type === "number"
+                      ? 0
+                      : undefined
+                  }
+                  step={
+                    selectedField.type === "number"
+                      ? 1
+                      : undefined
+                  }
+                  value={correctedValue}
+                  onChange={(event) =>
+                    setCorrectedValue(event.target.value)
+                  }
+                  disabled={
+                    isPending || originalValue === undefined
+                  }
+                  placeholder="Enter corrected value"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="mt-6 block">
+                <span className="text-sm font-medium text-zinc-300">
+                  Correction reason
+                </span>
+
+                <textarea
+                  value={reason}
+                  onChange={(event) =>
+                    setReason(event.target.value)
+                  }
+                  disabled={
+                    isPending || originalValue === undefined
+                  }
+                  rows={3}
+                  placeholder="Required: explain why the imported value needs to be corrected..."
+                  className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={runCorrection}
+                disabled={
+                  isPending || originalValue === undefined
+                }
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isPending
+                  ? "Recording correction..."
+                  : "Record correction"}
+              </button>
+            </>
+          )}
 
           {message ? (
             <div
