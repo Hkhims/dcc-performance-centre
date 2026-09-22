@@ -145,7 +145,7 @@ export default async function PortalPage() {
           </div>
         </section>
 
-        {isSuperAdmin || hasTeamAdminAccess ? (
+        {(isSuperAdmin || hasTeamAdminAccess) && (
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.055] p-7">
             <p className="text-sm font-semibold text-amber-400">
               Match administration
@@ -168,7 +168,34 @@ export default async function PortalPage() {
               Open Match Review Queue
             </Link>
           </section>
-        ) : access.player_id ? (
+        )}
+
+        {isSuperAdmin ? (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.035] p-7">
+            <p className="text-sm font-semibold text-amber-400">
+              Account administration
+            </p>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              Player Profile Claims
+            </h2>
+
+            <p className="mt-3 max-w-3xl leading-7 text-zinc-400">
+              Review requests from DCC account holders who want to
+              link their account to an existing player profile.
+            </p>
+
+            <Link
+              href="/portal/player-claims"
+              className="mt-6 inline-flex rounded-xl border border-amber-400/30 px-5 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-400/10"
+            >
+              Open Player Profile Claims
+            </Link>
+          </section>
+        ) : null}
+
+        {!isSuperAdmin && !hasTeamAdminAccess ? (
+          access.player_id ? (
           <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
             <h2 className="text-2xl font-bold">
               Player Portal
@@ -192,11 +219,20 @@ export default async function PortalPage() {
             </p>
 
             <p className="mt-3 max-w-3xl leading-7 text-zinc-500">
-              If you have an existing DCC player profile, you will
-              be able to claim and link it from here.
+              If you have an existing DCC player profile, you can
+              request to link it to this account. A DCC administrator
+              must approve the request before player access is granted.
             </p>
+
+            <Link
+              href="/portal/claim-player"
+              className="mt-6 inline-flex rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300"
+            >
+              Claim my DCC player profile
+            </Link>
           </section>
-        )}
+        )
+        ) : null}
       </div>
     </main>
   );
