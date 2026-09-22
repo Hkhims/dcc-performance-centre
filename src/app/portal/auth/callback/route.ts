@@ -1,19 +1,43 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+function getPublicOrigin(request: Request) {
+  const requestUrl = new URL(request.url);
+
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim();
+
+  if (forwardedHost) {
+    const protocol =
+      forwardedProto === "http" || forwardedProto === "https"
+        ? forwardedProto
+        : requestUrl.protocol.replace(":", "");
+
+    return `${protocol}://${forwardedHost}`;
+  }
+
+  return requestUrl.origin;
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
 
   const code = requestUrl.searchParams.get("code");
-  const next =
-    requestUrl.searchParams.get("next") ??
-    "/portal";
+  const next = requestUrl.searchParams.get("next") ?? "/portal";
+  const publicOrigin = getPublicOrigin(request);
 
   if (!code) {
     return NextResponse.redirect(
       new URL(
-        "/portal/login?auth-error=recovery",
-        request.url,
+        "/portal/login?auth-error=callback",
+        publicOrigin,
       ),
     );
   }
@@ -26,8 +50,8 @@ export async function GET(request: Request) {
   if (error) {
     return NextResponse.redirect(
       new URL(
-        "/portal/login?auth-error=recovery",
-        request.url,
+        "/portal/login?auth-error=callback",
+        publicOrigin,
       ),
     );
   }
@@ -38,6 +62,6 @@ export async function GET(request: Request) {
       : "/portal";
 
   return NextResponse.redirect(
-    new URL(safeNext, request.url),
+    new URL(safeNext, publicOrigin),
   );
 }

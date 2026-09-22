@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import LoginForm from "./LoginForm";
+import RegisterForm from "./RegisterForm";
 
-export default async function PortalLoginPage() {
+export default async function PortalRegisterPage() {
   const supabase = await createClient();
 
   const { data } = await supabase.auth.getClaims();
@@ -21,22 +21,24 @@ export default async function PortalLoginPage() {
           </p>
 
           <h1 className="mt-3 text-3xl font-bold tracking-tight">
-            DCC Portal
+            Create your DCC account
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-zinc-400">
-            Sign in with your DCC account to access your club features.
+            Create an account to access DCC&apos;s online features. If you
+            already have a DCC player profile, you can claim it after your
+            account is active.
           </p>
 
-          <LoginForm />
+          <RegisterForm />
 
           <p className="mt-7 text-center text-sm text-zinc-400">
-            New to DCC online?{" "}
+            Already have an account?{" "}
             <Link
-              href="/portal/register"
+              href="/portal/login"
               className="font-medium text-amber-400 transition hover:text-amber-300"
             >
-              Create an account
+              Sign in
             </Link>
           </p>
         </section>

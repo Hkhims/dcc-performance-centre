@@ -168,15 +168,32 @@ export default async function PortalPage() {
               Open Match Review Queue
             </Link>
           </section>
-        ) : (
+        ) : access.player_id ? (
           <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
             <h2 className="text-2xl font-bold">
               Player Portal
             </h2>
 
             <p className="mt-3 max-w-3xl leading-7 text-zinc-400">
-              Your DCC player account is active. Player-facing
-              Portal features will appear here as they are added.
+              Your DCC account is linked to your player profile.
+              Player-facing Portal features will appear here as
+              they are added.
+            </p>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
+            <h2 className="text-2xl font-bold">
+              Your DCC account
+            </h2>
+
+            <p className="mt-3 max-w-3xl leading-7 text-zinc-400">
+              Your DCC account is active. You can use general DCC
+              features without linking a player profile.
+            </p>
+
+            <p className="mt-3 max-w-3xl leading-7 text-zinc-500">
+              If you have an existing DCC player profile, you will
+              be able to claim and link it from here.
             </p>
           </section>
         )}

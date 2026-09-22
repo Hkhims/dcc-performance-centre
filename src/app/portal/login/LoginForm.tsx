@@ -12,6 +12,9 @@ export default function LoginForm() {
   const passwordReset =
     searchParams.get("password-reset") === "success";
 
+  const callbackError =
+    searchParams.get("auth-error") === "callback";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,6 +51,16 @@ export default function LoginForm() {
       {passwordReset ? (
         <p className="rounded-xl border border-green-400/20 bg-green-400/10 px-4 py-3 text-sm text-green-200">
           Password updated successfully. You can now sign in.
+        </p>
+      ) : null}
+
+      {callbackError ? (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200"
+        >
+          We couldn&apos;t complete that authentication request. The link may
+          be invalid or expired. Please try again.
         </p>
       ) : null}
 
