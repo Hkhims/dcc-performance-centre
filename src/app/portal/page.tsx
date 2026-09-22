@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 type PortalAccess = {
   user_id: string;
   player_id: string | null;
-  account_role: "Player" | "Super Admin";
+  account_role: "User" | "Super Admin";
   account_status: "Invited" | "Active" | "Disabled";
   display_name: string | null;
   team_ids: string[];
@@ -74,7 +74,7 @@ export default async function PortalPage() {
   const isSuperAdmin =
     access.account_role === "Super Admin";
 
-  const hasCaptainAccess =
+  const hasTeamAdminAccess =
     access.team_ids.length > 0;
 
   return (
@@ -128,9 +128,9 @@ export default async function PortalPage() {
             <p className="mt-3 text-xl font-semibold">
               {isSuperAdmin
                 ? "All DCC teams"
-                : hasCaptainAccess
+                : hasTeamAdminAccess
                   ? access.team_ids.join(", ")
-                  : "Player access"}
+                  : "General access"}
             </p>
           </div>
 
@@ -145,7 +145,7 @@ export default async function PortalPage() {
           </div>
         </section>
 
-        {isSuperAdmin || hasCaptainAccess ? (
+        {isSuperAdmin || hasTeamAdminAccess ? (
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.055] p-7">
             <p className="text-sm font-semibold text-amber-400">
               Match administration

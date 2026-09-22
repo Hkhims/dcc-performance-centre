@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 type PortalAccess = {
   user_id: string;
   player_id: string | null;
-  account_role: "Player" | "Super Admin";
+  account_role: "User" | "Super Admin";
   account_status: "Invited" | "Active" | "Disabled";
   display_name: string | null;
   team_ids: string[];
@@ -126,10 +126,10 @@ export default async function MatchReviewQueuePage() {
   const isSuperAdmin =
     access.account_role === "Super Admin";
 
-  const hasCaptainAccess =
+  const hasTeamAdminAccess =
     access.team_ids.length > 0;
 
-  if (!isSuperAdmin && !hasCaptainAccess) {
+  if (!isSuperAdmin && !hasTeamAdminAccess) {
     redirect("/portal");
   }
 
