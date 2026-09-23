@@ -80,34 +80,6 @@ export default async function PortalPage() {
   return (
     <main className="min-h-screen bg-[#05070d] px-6 py-12 text-white">
       <div className="w-full">
-        <header className="flex flex-col gap-6 border-b border-white/10 pb-8 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
-              Dunmurry Cricket Club
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold tracking-tight">
-              DCC Portal
-            </h1>
-
-            <p className="mt-3 text-zinc-400">
-              Welcome
-              {access.display_name
-                ? `, ${access.display_name}`
-                : ""}
-              .
-            </p>
-          </div>
-
-          <form action="/portal/logout" method="post">
-            <button
-              type="submit"
-              className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-            >
-              Sign out
-            </button>
-          </form>
-        </header>
 
         <section className="grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
@@ -194,8 +166,7 @@ export default async function PortalPage() {
           </section>
         ) : null}
 
-        {!isSuperAdmin && !hasTeamAdminAccess ? (
-          access.player_id ? (
+        {access.player_id ? (
           <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
             <h2 className="text-2xl font-bold">
               Player Portal
@@ -231,8 +202,7 @@ export default async function PortalPage() {
               Claim my DCC player profile
             </Link>
           </section>
-        )
-        ) : null}
+        )}
       </div>
     </main>
   );

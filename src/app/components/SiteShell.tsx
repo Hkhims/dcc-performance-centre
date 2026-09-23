@@ -19,6 +19,10 @@ export default function SiteShell({
 }) {
   const pathname = usePathname();
 
+  const isPortal =
+    pathname === "/portal" ||
+    pathname.startsWith("/portal/");
+
   const [statsOpen, setStatsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -29,6 +33,10 @@ export default function SiteShell({
     setMobileMenuOpen(false);
     setStatsOpen(false);
   };
+
+  if (isPortal) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-[#050914] text-white">
