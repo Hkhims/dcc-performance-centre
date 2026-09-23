@@ -71,20 +71,49 @@ export default function PortalNavigation({
         </nav>
 
         {(isSuperAdmin || hasTeamAdminAccess) && (
-          <div className="mt-4 flex flex-wrap gap-3 border-t border-white/10 pt-4 text-sm">
-            {hasTeamAdminAccess && (
-              <span className="text-amber-300">
-                Team administration
-              </span>
-            )}
+  <nav
+    aria-label="DCC administration navigation"
+    className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4"
+  >
+    <span className="mr-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+      Administration
+    </span>
 
-            {isSuperAdmin && (
-              <span className="text-amber-300">
-                Club administration
-              </span>
-            )}
-          </div>
-        )}
+    <Link
+      href="/portal/imports"
+      aria-current={
+        pathname.startsWith("/portal/imports")
+          ? "page"
+          : undefined
+      }
+      className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+        pathname.startsWith("/portal/imports")
+          ? "bg-amber-400 text-black"
+          : "text-amber-300 hover:bg-white/10"
+      }`}
+    >
+      Match Reviews
+    </Link>
+
+    {isSuperAdmin && (
+      <Link
+        href="/portal/player-claims"
+        aria-current={
+          pathname === "/portal/player-claims"
+            ? "page"
+            : undefined
+        }
+        className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          pathname === "/portal/player-claims"
+            ? "bg-amber-400 text-black"
+            : "text-amber-300 hover:bg-white/10"
+        }`}
+      >
+        Player Claims
+      </Link>
+    )}
+  </nav>
+)}
       </div>
     </header>
   );
