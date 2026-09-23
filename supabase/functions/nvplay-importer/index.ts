@@ -426,6 +426,35 @@ Deno.serve(async (req) => {
     }
 
     currentStage =
+      "authenticating request";
+
+    const schedulerSecret =
+      Deno.env.get("DCC_IMPORT_SCHEDULER_SECRET");
+
+    if (!schedulerSecret) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Scheduler authentication is not configured",
+        },
+        503,
+      );
+    }
+
+    const suppliedSecret =
+      req.headers.get("x-dcc-scheduler-secret");
+
+    if (suppliedSecret !== schedulerSecret) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        401,
+      );
+    }
+
+    currentStage =
       "checking environment";
 
     if (
