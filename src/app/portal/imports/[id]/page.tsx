@@ -507,6 +507,27 @@ export default async function MatchReviewPage({
 
   const matchImport = importData as MatchImport;
 
+  const { data: matchTeams, error: matchTeamsError } =
+  await supabase
+    .from("external_match_teams")
+    .select("team_id")
+    .eq("external_match_id", matchImport.external_match_id);
+
+if (matchTeamsError) {
+  throw new Error(
+    `Unable to load match team assignments: ${matchTeamsError.message}`,
+  );
+}
+
+if (
+  !isSuperAdmin &&
+  !(matchTeams ?? []).some((team) =>
+    access.team_ids.includes(team.team_id),
+  )
+) {
+  notFound();
+}
+
   const { data: latestImportData, error: latestImportError } =
     await supabase
       .from("match_imports")

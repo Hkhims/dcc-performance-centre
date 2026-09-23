@@ -310,7 +310,12 @@ export default async function MatchReviewQueuePage() {
             <div className="text-sm text-zinc-500">
               {isSuperAdmin
                 ? "Super Admin · All DCC teams"
-                : `Captain · ${access.team_ids.join(", ")}`}
+                : `Team Admin · ${access.team_ids
+    .map((teamId) => {
+      const match = /^T0?([1-6])$/.exec(teamId);
+      return match ? `DCC ${match[1]}` : teamId;
+    })
+    .join(", ")}`}
             </div>
           </div>
         </header>

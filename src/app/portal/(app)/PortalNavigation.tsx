@@ -80,12 +80,25 @@ export default function PortalNavigation({
     </span>
 
     <Link
-      href="/portal/imports"
-      aria-current={
-        pathname.startsWith("/portal/imports")
-          ? "page"
-          : undefined
-      }
+  href="/portal/team-admin"
+  aria-current={
+    pathname === "/portal/team-admin" ? "page" : undefined
+  }
+  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+    pathname === "/portal/team-admin"
+      ? "bg-amber-400 text-black"
+      : "text-amber-300 hover:bg-white/10"
+  }`}
+>
+  Team Admin
+</Link>
+<Link
+  href="/portal/imports"
+  aria-current={
+    pathname.startsWith("/portal/imports")
+      ? "page"
+      : undefined
+  }
       className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
         pathname.startsWith("/portal/imports")
           ? "bg-amber-400 text-black"
