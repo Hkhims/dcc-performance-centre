@@ -95,6 +95,184 @@ export default async function MyCricketPage() {
   }
 
   const rows = performances ?? [];
+  const { data: teams, error: teamsError } = await supabase
+  .from("teams")
+  .select("team_id, team_name, display_order")
+  .order("display_order", { ascending: true });
+
+if (teamsError) {
+  throw new Error(
+    `Unable to load DCC teams: ${teamsError.message}`,
+  );
+}
+
+const teamAppearances = (teams ?? [])
+  .map((team) => ({
+    team_id: team.team_id,
+    team_name: team.team_name,
+    appearances: new Set(
+      rows
+        .filter((row) => row.team_id === team.team_id)
+        .map((row) => row.source_match_id),
+    ).size,
+  }))
+  .filter((team) => team.appearances > 0);
+  // Match history: retrieve the matches this player represented DCC in.
+  const sourceMatchIds = [
+    ...new Set(
+      rows
+        .map((row) => row.source_match_id)
+        .filter(Boolean),
+    ),
+  ];
+
+  const { data: matchEntries, error: matchEntriesError } =
+    sourceMatchIds.length > 0
+      ? await supabase
+          .from("match_team_entries")
+          .select(`
+            source_match_id,
+            match_id,
+            team_id,
+            competition_id,
+            opponent_display_name,
+            result,
+            dcc_score,
+            dcc_wickets,
+            opponent_score,
+            opponent_wickets
+          `)
+          .in("source_match_id", sourceMatchIds)
+      : { data: [], error: null };
+
+  if (matchEntriesError) {
+    throw new Error(
+      `Unable to load match history: ${matchEntriesError.message}`,
+    );
+  }
+
+  const relevantMatchEntries = (matchEntries ?? []).filter(
+    (entry) =>
+      rows.some(
+        (row) =>
+          row.source_match_id === entry.source_match_id &&
+          row.team_id === entry.team_id,
+      ),
+  );
+    const matchIds = [
+    ...new Set(
+      relevantMatchEntries
+        .map((entry) => entry.match_id)
+        .filter(Boolean),
+    ),
+  ];
+
+  const competitionIds = [
+    ...new Set(
+      relevantMatchEntries
+        .map((entry) => entry.competition_id)
+        .filter(Boolean),
+    ),
+  ];
+
+  const { data: matchDates, error: matchDatesError } =
+    matchIds.length > 0
+      ? await supabase
+          .from("matches")
+          .select("match_id, match_date")
+          .in("match_id", matchIds)
+      : { data: [], error: null };
+
+  if (matchDatesError) {
+    throw new Error(
+      `Unable to load match dates: ${matchDatesError.message}`,
+    );
+  }
+
+  const { data: competitions, error: competitionsError } =
+    competitionIds.length > 0
+      ? await supabase
+          .from("competitions")
+          .select("competition_id, competition_name")
+          .in("competition_id", competitionIds)
+      : { data: [], error: null };
+
+  if (competitionsError) {
+    throw new Error(
+      `Unable to load competitions: ${competitionsError.message}`,
+    );
+  }
+  const teamNameMap = new Map(
+    (teams ?? []).map((team) => [
+      team.team_id,
+      team.team_name,
+    ]),
+  );
+
+  const matchDateMap = new Map(
+    (matchDates ?? []).map((match) => [
+      match.match_id,
+      match.match_date,
+    ]),
+  );
+
+  const competitionNameMap = new Map(
+    (competitions ?? []).map((competition) => [
+      competition.competition_id,
+      competition.competition_name,
+    ]),
+  );
+
+  const matchEntryMap = new Map(
+    relevantMatchEntries.map((entry) => [
+      `${entry.source_match_id}__${entry.team_id}`,
+      entry,
+    ]),
+  );
+
+  const matchHistory = rows
+    .map((performance) => {
+      const matchEntry = matchEntryMap.get(
+        `${performance.source_match_id}__${performance.team_id}`,
+      );
+
+      if (!matchEntry) {
+        return null;
+      }
+
+      return {
+        ...performance,
+        match_id: matchEntry.match_id,
+        match_date:
+          matchDateMap.get(matchEntry.match_id) ?? null,
+        team_name:
+          teamNameMap.get(performance.team_id) ??
+          performance.team_id,
+        competition_name:
+          competitionNameMap.get(
+            matchEntry.competition_id,
+          ) ?? "Competition",
+        opponent: matchEntry.opponent_display_name,
+        result: matchEntry.result,
+        dcc_score: matchEntry.dcc_score,
+        dcc_wickets: matchEntry.dcc_wickets,
+        opponent_score: matchEntry.opponent_score,
+        opponent_wickets: matchEntry.opponent_wickets,
+      };
+    })
+    .filter((match) => match !== null)
+    .sort((a, b) => {
+      const dateA = a.match_date ?? "";
+      const dateB = b.match_date ?? "";
+
+      if (dateA !== dateB) {
+        return dateB.localeCompare(dateA);
+      }
+
+      return b.source_match_id.localeCompare(
+        a.source_match_id,
+      );
+    });
 
   const matches = new Set(
     rows.map((row) => row.source_match_id),
@@ -224,7 +402,40 @@ export default async function MyCricketPage() {
           </Link>
         </div>
       </section>
+      {teamAppearances.length > 0 && (
+  <section className="mt-10">
+    <h2 className="text-2xl font-bold text-white">
+      My Teams
+    </h2>
 
+    <p className="mt-2 text-sm text-zinc-400">
+      Your appearances for each DCC team in 2026.
+    </p>
+
+    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {teamAppearances.map((team) => (
+        <div
+          key={team.team_id}
+          className="rounded-xl border border-white/10 bg-white/[0.035] p-5"
+        >
+          <p className="text-sm font-semibold text-amber-400">
+            {team.team_name}
+          </p>
+
+          <p className="mt-3 text-3xl font-black text-white">
+            {team.appearances}
+          </p>
+
+          <p className="mt-1 text-xs text-zinc-400">
+            {team.appearances === 1
+              ? "appearance"
+              : "appearances"}
+          </p>
+        </div>
+      ))}
+    </div>
+  </section>
+)}
       <section className="mt-10">
         <h2 className="text-2xl font-bold text-white">
           2026 Batting
@@ -288,6 +499,135 @@ export default async function MyCricketPage() {
             value={catches + stumpings + runOuts}
           />
         </div>
+      </section>
+      <section className="mt-12">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-400">
+              2026 Season
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-white">
+              Match History
+            </h2>
+          </div>
+
+          <p className="text-sm text-zinc-400">
+            {matchHistory.length}{" "}
+            {matchHistory.length === 1
+              ? "appearance"
+              : "appearances"}
+          </p>
+        </div>
+
+        {matchHistory.length === 0 ? (
+          <p className="mt-5 rounded-xl border border-white/10 p-6 text-zinc-400">
+            No match history is available yet.
+          </p>
+        ) : (
+          <div className="mt-5 space-y-3">
+            {matchHistory.map((match) => (
+              <Link
+                key={`${match.source_match_id}-${match.team_id}`}
+                href={`/matches/${match.match_id}?fromMyCricket=1`}
+                className="block rounded-xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-amber-400/40"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                      {match.match_date
+                        ? new Intl.DateTimeFormat("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            timeZone: "UTC",
+                          }).format(
+                            new Date(
+                              `${match.match_date}T00:00:00Z`,
+                            ),
+                          )
+                        : "Date unavailable"}
+                    </p>
+
+                    <h3 className="mt-2 text-lg font-bold text-white">
+                      {match.team_name} vs {match.opponent}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-zinc-400">
+                      {match.competition_name}
+                    </p>
+                  </div>
+
+                  {match.result && (
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold">
+                      {match.result}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {match.batted && (
+                    <div className="rounded-lg bg-white/5 px-4 py-3">
+                      <p className="text-xs text-zinc-400">
+                        Batting
+                      </p>
+                      <p className="mt-1 text-lg font-bold">
+                        {match.runs ?? 0}
+                        {match.is_not_out ? "*" : ""}
+                        {match.balls_faced !== null && (
+                          <span className="ml-2 text-sm text-zinc-400">
+                            ({match.balls_faced})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {match.bowled && (
+                    <div className="rounded-lg bg-white/5 px-4 py-3">
+                      <p className="text-xs text-zinc-400">
+                        Bowling
+                      </p>
+                      <p className="mt-1 text-lg font-bold">
+                        {match.wickets ?? 0}/
+                        {match.runs_conceded ?? 0}
+                      </p>
+                    </div>
+                  )}
+
+                  {(match.catches ?? 0) +
+                    (match.stumpings ?? 0) +
+                    (match.run_outs ?? 0) >
+                    0 && (
+                    <div className="rounded-lg bg-white/5 px-4 py-3">
+                      <p className="text-xs text-zinc-400">
+                        Fielding
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">
+                        {[
+                          (match.catches ?? 0) > 0
+                            ? `${match.catches} catches`
+                            : null,
+                          (match.stumpings ?? 0) > 0
+                            ? `${match.stumpings} stumpings`
+                            : null,
+                          (match.run_outs ?? 0) > 0
+                            ? `${match.run_outs} run outs`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="mt-5 text-sm font-semibold text-amber-400">
+                  View full scorecard →
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

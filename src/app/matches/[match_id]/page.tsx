@@ -128,6 +128,7 @@ export default async function MatchDetailPage({
     fromTeam?: string | string[];
     fromPlayer?: string | string[];
     playerTeam?: string | string[];
+    fromMyCricket?: string | string[];
   }>;
 }) {
   const { match_id } = await params;
@@ -144,7 +145,9 @@ export default async function MatchDetailPage({
   const requestedPlayerTeamId = getSearchParam(
     resolvedSearchParams.playerTeam,
   );
-
+  const requestedFromMyCricket = getSearchParam(
+  resolvedSearchParams.fromMyCricket,
+);
   const { data: match, error: matchError } = await supabase
     .from("matches")
     .select(`
@@ -377,7 +380,9 @@ export default async function MatchDetailPage({
     : null;
 
   const backHref =
-    requestedFromTeamId && contextTeamName
+  requestedFromMyCricket === "1"
+    ? "/portal/my-cricket"
+    : requestedFromTeamId && contextTeamName
       ? `/teams/${requestedFromTeamId}`
       : contextPlayer
         ? `/players/${contextPlayer.player_slug}${
@@ -387,8 +392,10 @@ export default async function MatchDetailPage({
           }`
         : "/matches";
 
-  const backLabel =
-    requestedFromTeamId && contextTeamName
+const backLabel =
+  requestedFromMyCricket === "1"
+    ? "Back to My Cricket"
+    : requestedFromTeamId && contextTeamName
       ? `Back to ${contextTeamName}`
       : contextPlayer
         ? `Back to ${contextPlayer.player_name}`
