@@ -409,3 +409,150 @@ export async function resolveMatchImportCorrection(
     };
   }
 }
+
+export async function reassignMatchImportPlayer(
+  matchImportId: number,
+  playerIndex: number,
+  replacementPlayerId: string,
+  reason: string,
+): Promise<ReviewActionResult> {
+  try {
+    if (!Number.isInteger(matchImportId) || matchImportId <= 0) {
+      return {
+        ok: false,
+        message: "Invalid match import ID.",
+      };
+    }
+
+    if (!Number.isInteger(playerIndex) || playerIndex < 0) {
+      return {
+        ok: false,
+        message: "Invalid player performance.",
+      };
+    }
+
+    const cleanedPlayerId = replacementPlayerId.trim();
+    const cleanedReason = reason.trim();
+
+    if (!cleanedPlayerId) {
+      return {
+        ok: false,
+        message: "Select the correct DCC player.",
+      };
+    }
+
+    if (!cleanedReason) {
+      return {
+        ok: false,
+        message: "A reassignment reason is required.",
+      };
+    }
+
+    const { supabase, signedIn } =
+      await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in to reassign a player.",
+      };
+    }
+
+    const { error } = await supabase.rpc(
+      "reassign_match_import_player",
+      {
+        target_match_import_id: matchImportId,
+        target_player_index: playerIndex,
+        target_player_id: cleanedPlayerId,
+        target_reason: cleanedReason,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidateImport(matchImportId);
+
+    return {
+      ok: true,
+      message: "Player reassigned successfully.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
+export async function resolveMatchImportPlayerReassignment(
+  matchImportId: number,
+  correctionId: number,
+  reason: string,
+): Promise<ReviewActionResult> {
+  try {
+    if (!Number.isInteger(matchImportId) || matchImportId <= 0) {
+      return {
+        ok: false,
+        message: "Invalid match import ID.",
+      };
+    }
+
+    if (!Number.isInteger(correctionId) || correctionId <= 0) {
+      return {
+        ok: false,
+        message: "Invalid player reassignment.",
+      };
+    }
+
+    const cleanedReason = reason.trim();
+
+    if (!cleanedReason) {
+      return {
+        ok: false,
+        message: "A resolution reason is required.",
+      };
+    }
+
+    const { supabase, signedIn } =
+      await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in to resolve a player reassignment.",
+      };
+    }
+
+    const { error } = await supabase.rpc(
+      "resolve_match_import_player_reassignment",
+      {
+        target_correction_id: correctionId,
+        target_reason: cleanedReason,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidateImport(matchImportId);
+
+    return {
+      ok: true,
+      message: "Player reassignment resolved successfully.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}

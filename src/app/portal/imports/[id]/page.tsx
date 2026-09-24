@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import ReviewActions from "./ReviewActions";
 import MatchSummaryCorrections from "./MatchSummaryCorrections";
 import PlayerPerformanceCorrections from "./PlayerPerformanceCorrections";
+import PlayerIdentityReassignment from "./PlayerIdentityReassignment";
 
 type PortalAccess = {
   user_id: string;
@@ -134,6 +135,11 @@ type PlayerPerformance = {
   batting_position?: number | null;
   external_player_name?: string;
   parser_notes?: unknown[];
+  source_identity?: {
+    provider?: string | null;
+    external_player_id?: string | null;
+    external_player_name?: string | null;
+  } | null;
 };
 
 type Correction = {
@@ -608,6 +614,23 @@ if (
   }
 
   const corrections = (correctionData ?? []) as Correction[];
+    const { data: activePlayerData, error: activePlayerError } =
+    await supabase
+      .from("players")
+      .select("player_id, player_name")
+      .eq("active", true)
+      .order("player_name", { ascending: true });
+
+  if (activePlayerError) {
+    throw new Error(
+      `Unable to load active DCC players: ${activePlayerError.message}`,
+    );
+  }
+
+  const activePlayers = (activePlayerData ?? []).map((player) => ({
+    playerId: player.player_id,
+    playerName: player.player_name,
+  }));
 
   const payload = matchImport.parsed_payload ?? {};
   const match = payload.match ?? {};
@@ -641,7 +664,65 @@ if (
     playerPayloadKey === "dcc_players"
       ? reviewedPayload.dcc_players ?? []
       : reviewedPayload.player_performances ?? [];
+  const playerIdentityRows =
+    playerPayloadKey === "dcc_players"
+      ? performances.flatMap((player, playerIndex) => {
+          const playerId = player.player_id?.trim();
 
+          if (!playerId) {
+            return [];
+          }
+
+          const playerName =
+            activePlayers.find(
+              (candidate) =>
+                candidate.playerId === playerId,
+            )?.playerName ??
+            player.external_player_name?.trim() ??
+            player.source_identity?.external_player_name?.trim() ??
+            playerId;
+
+          return [
+            {
+              playerIndex,
+              playerId,
+              playerName,
+              teamId: player.team_id?.trim() || null,
+              sourceMatchId:
+                player.source_match_id?.trim() || null,
+              sourceIdentity: player.source_identity
+                ? {
+                    provider:
+                      player.source_identity.provider?.trim() ||
+                      null,
+                    externalPlayerId:
+                      player.source_identity.external_player_id?.trim() ||
+                      null,
+                    externalPlayerName:
+                      player.source_identity.external_player_name?.trim() ||
+                      null,
+                  }
+                : null,
+            },
+          ];
+        })
+      : [];
+  const playerIdentityCorrections =
+    playerPayloadKey === "dcc_players"
+      ? corrections.map((correction) => ({
+          id: correction.id,
+          status: correction.status,
+          entityType: correction.entity_type,
+          fieldName: correction.field_name,
+          jsonPath: correction.json_path ?? [],
+          correctedValue: correction.corrected_value,
+          reason: correction.reason,
+        }))
+      : [];
+  const canReviewPlayerIdentity =
+    isLatestImport &&
+    (matchImport.import_status === "Imported" ||
+      matchImport.import_status === "Needs Review");
   const batting = performances
     .filter((player) => player.batted)
     .sort(
@@ -1308,7 +1389,15 @@ if (
             </p>
           )}
         </section>
-
+        {playerPayloadKey === "dcc_players" ? (
+          <PlayerIdentityReassignment
+            matchImportId={matchImport.id}
+            canReview={canReviewPlayerIdentity}
+            players={playerIdentityRows}
+            activePlayers={activePlayers}
+            corrections={playerIdentityCorrections}
+          />
+        ) : null}
         <PlayerPerformanceCorrections
           matchImportId={matchImport.id}
           performances={performances}
