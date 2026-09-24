@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import AvailabilityControls from "./AvailabilityControls";
+import CreateMatchForm from "./CreateMatchForm";
+import TeamMembershipManager from "./TeamMembershipManager";
 
 type PortalAccess = {
   account_role: "User" | "Super Admin";
@@ -11,6 +14,15 @@ type PortalAccess = {
 type DccTeam = {
   team_id: string;
   team_name: string;
+};
+
+type DccPlayer = {
+  player_id: string;
+  player_name: string;
+};
+
+type TeamPlayerMembership = {
+  player_id: string;
 };
 
 type TeamMatchEntry = {
@@ -60,6 +72,7 @@ function formatMatchDate(match: ScheduledMatch) {
   }
 
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -129,6 +142,54 @@ export default async function TeamAdminTeamPage({
   if (!team) {
     redirect("/portal/team-admin");
   }
+  const [
+  { data: playerData, error: playersError },
+  { data: membershipData, error: membershipsError },
+] = await Promise.all([
+  supabase
+    .from("players")
+    .select("player_id, player_name")
+    .eq("active", true)
+    .order("player_name"),
+  supabase
+    .from("team_player_memberships")
+    .select("player_id")
+    .eq("team_id", teamId)
+    .eq("active", true),
+]);
+
+if (playersError) {
+  throw new Error(
+    `Unable to load active DCC players: ${playersError.message}`,
+  );
+}
+
+if (membershipsError) {
+  throw new Error(
+    `Unable to load team player memberships: ${membershipsError.message}`,
+  );
+}
+
+const activePlayers = (playerData ?? []) as DccPlayer[];
+
+const activeMemberships =
+  (membershipData ?? []) as TeamPlayerMembership[];
+
+const activePlayerById = new Map(
+  activePlayers.map((player) => [
+    player.player_id,
+    player,
+  ]),
+);
+
+const teamMembers = activeMemberships
+  .map((membership) =>
+    activePlayerById.get(membership.player_id),
+  )
+  .filter(
+    (player): player is DccPlayer =>
+      player !== undefined,
+  );
 
   const { data: teamEntryData, error: teamEntriesError } =
     await supabase
@@ -194,6 +255,90 @@ export default async function TeamAdminTeamPage({
   );
 
   const nextFixture = scheduledMatches[0] ?? null;
+    let availabilityPoll: {
+    poll_id: number;
+    status: string;
+    opened_at: string | null;
+    closed_at: string | null;
+  } | null = null;
+
+  let availabilityCounts = {
+    total: 0,
+    available: 0,
+    unavailable: 0,
+    notResponded: 0,
+  };
+
+  if (nextFixture) {
+    const { data: pollData, error: pollError } = await supabase
+      .from("match_availability_polls")
+      .select("poll_id, status, opened_at, closed_at")
+      .eq("match_id", nextFixture.match_id)
+      .eq("team_id", team.team_id)
+      .maybeSingle();
+
+    if (pollError) {
+      console.error(
+        "Failed to load match availability poll:",
+        pollError,
+      );
+    }
+
+    availabilityPoll = pollData;
+
+    if (availabilityPoll) {
+      const [
+        { data: audienceData, error: audienceError },
+        { data: responseData, error: responseError },
+      ] = await Promise.all([
+        supabase
+          .from("match_availability_audience")
+          .select("player_id")
+          .eq("poll_id", availabilityPoll.poll_id),
+        supabase
+          .from("match_availability")
+          .select("player_id, availability_status")
+          .eq("poll_id", availabilityPoll.poll_id),
+      ]);
+
+      if (audienceError) {
+        console.error(
+          "Failed to load match availability audience:",
+          audienceError,
+        );
+      }
+
+      if (responseError) {
+        console.error(
+          "Failed to load match availability responses:",
+          responseError,
+        );
+      }
+
+      const audience = audienceData ?? [];
+      const responses = responseData ?? [];
+
+      const available = responses.filter(
+        (response) =>
+          response.availability_status === "Available",
+      ).length;
+
+      const unavailable = responses.filter(
+        (response) =>
+          response.availability_status === "Unavailable",
+      ).length;
+
+      availabilityCounts = {
+        total: audience.length,
+        available,
+        unavailable,
+        notResponded: Math.max(
+          audience.length - available - unavailable,
+          0,
+        ),
+      };
+    }
+  }
   const laterFixtures = scheduledMatches.slice(1);
 
   return (
@@ -260,22 +405,83 @@ export default async function TeamAdminTeamPage({
                   Scheduled
                 </span>
               </div>
+<div className="mt-7 grid gap-4 border-t border-white/10 pt-6 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/50">
+        Availability
+      </p>
 
-              <div className="mt-7 grid gap-4 border-t border-white/10 pt-6 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/20 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                    Availability
-                  </p>
+      <p className="mt-2 text-lg font-semibold text-white">
+        {!availabilityPoll
+          ? "Not Open"
+          : availabilityPoll.status === "Open"
+            ? "Open"
+            : "Closed"}
+      </p>
+    </div>
 
-                  <p className="mt-2 text-lg font-semibold">
-                    Not Open
-                  </p>
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        !availabilityPoll
+          ? "bg-white/10 text-white/60"
+          : availabilityPoll.status === "Open"
+            ? "bg-emerald-400/10 text-emerald-300"
+            : "bg-amber-400/10 text-amber-300"
+      }`}
+    >
+      {!availabilityPoll
+        ? "Not Open"
+        : availabilityPoll.status === "Open"
+          ? "Open"
+          : "Closed"}
+    </span>
+  </div>
 
-                  <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    Availability management will be connected to
-                    this fixture next.
-                  </p>
-                </div>
+  {!availabilityPoll ? (
+    <p className="mt-4 text-sm leading-6 text-white/60">
+      Availability has not been opened for this match yet.
+    </p>
+  ) : (
+    <div className="mt-5 grid grid-cols-3 gap-3">
+      <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+        <p className="text-xs text-white/50">Available</p>
+        <p className="mt-1 text-xl font-semibold text-white">
+          {availabilityCounts.available}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+        <p className="text-xs text-white/50">Unavailable</p>
+        <p className="mt-1 text-xl font-semibold text-white">
+          {availabilityCounts.unavailable}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+        <p className="text-xs text-white/50">Not Responded</p>
+        <p className="mt-1 text-xl font-semibold text-white">
+          {availabilityCounts.notResponded}
+        </p>
+      </div>
+    </div>
+  )}
+
+  {availabilityPoll ? (
+    <p className="mt-4 text-xs text-white/40">
+      {availabilityCounts.total}{" "}
+      {availabilityCounts.total === 1 ? "player" : "players"} in this
+      availability poll.
+    </p>
+  ) : null}
+  <AvailabilityControls
+  matchId={nextFixture.match_id}
+  teamId={team.team_id}
+  pollId={availabilityPoll?.poll_id ?? null}
+  status={availabilityPoll?.status ?? null}
+/>
+</div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
@@ -311,7 +517,54 @@ export default async function TeamAdminTeamPage({
             </div>
           )}
         </section>
+                <section className="pb-8">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-400">
+              Add Fixture
+            </p>
 
+            <h2 className="mt-2 text-2xl font-bold">
+              Create a friendly or warm-up match
+            </h2>
+
+            <p className="mt-3 max-w-3xl leading-7 text-zinc-400">
+              Add a non-competitive DCC fixture for{" "}
+              {team.team_name}. Official NCU fixtures are added
+              through the NV Play integration and cannot be
+              created here.
+            </p>
+
+            <CreateMatchForm
+              teamId={team.team_id}
+              teamName={team.team_name}
+              season={2026}
+            />
+          </div>
+        </section>
+                <section className="pb-8">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-7">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-400">
+              Team Players
+            </p>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              Manage {team.team_name} players
+            </h2>
+
+            <p className="mt-3 max-w-3xl leading-7 text-zinc-400">
+              Maintain the normal player group for this team.
+              These players form the default audience when match
+              availability is opened.
+            </p>
+
+            <TeamMembershipManager
+              teamId={team.team_id}
+              teamName={team.team_name}
+              players={activePlayers}
+              members={teamMembers}
+            />
+          </div>
+        </section>
         <section className="pb-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500">
