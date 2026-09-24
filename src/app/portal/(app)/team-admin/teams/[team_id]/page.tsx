@@ -484,19 +484,26 @@ const teamMembers = activeMemberships
 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                    Team Selection
-                  </p>
+  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+    Team Selection
+  </p>
 
-                  <p className="mt-2 text-lg font-semibold">
-                    Not Started
-                  </p>
+  <p className="mt-2 text-lg font-semibold">
+    Manage Selection
+  </p>
 
-                  <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    Team selection will remain available whether
-                    or not an availability poll is opened.
-                  </p>
-                </div>
+  <p className="mt-2 text-sm leading-6 text-zinc-500">
+    Build and publish the team independently of the
+    availability poll.
+  </p>
+
+  <Link
+    href={`/portal/team-admin/fixtures/${nextFixture.match_id}/selection`}
+    className="mt-5 inline-flex rounded-xl border border-amber-400/30 bg-amber-400/[0.08] px-4 py-2 text-sm font-semibold text-amber-300 transition hover:bg-amber-400/[0.14]"
+  >
+    Open Team Selection →
+  </Link>
+</div>
               </div>
             </article>
           ) : (
