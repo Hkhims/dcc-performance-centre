@@ -16,6 +16,9 @@ const IMPORT_END_DAY = 30;
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 50;
+const SCORECARD_REQUEST_DELAY_MS = 250;
+const SCORECARD_MAX_ATTEMPTS = 4;
+const SCORECARD_RETRY_BASE_DELAY_MS = 2000;
 
 type NvPlayMatch = Record<string, unknown>;
 
@@ -387,27 +390,82 @@ async function fetchScorecard(
     `&stats=true` +
     `&commentary=true`;
 
-  const response =
-    await fetch(
-      scorecardUrl,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      },
-    );
+  await new Promise<void>(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        SCORECARD_REQUEST_DELAY_MS,
+      );
+    },
+  );
 
-  if (!response.ok) {
+  for (
+    let attempt = 1;
+    attempt <= SCORECARD_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    const response =
+      await fetch(
+        scorecardUrl,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      );
+
+    if (response.ok) {
+      return await response.json();
+    }
+
     const text =
       await response.text();
 
-    throw new Error(
-      `HTTP ${response.status}: ${text.slice(0, 300)}`,
+    if (
+      response.status !== 429 ||
+      attempt === SCORECARD_MAX_ATTEMPTS
+    ) {
+      throw new Error(
+        `HTTP ${response.status}: ${text.slice(0, 300)}`,
+      );
+    }
+
+    const retryAfterHeader =
+      response.headers.get(
+        "Retry-After",
+      );
+
+    const retryAfterSeconds =
+      retryAfterHeader === null
+        ? Number.NaN
+        : Number(retryAfterHeader);
+
+    const fallbackDelayMs =
+      2 ** (attempt - 1) *
+      SCORECARD_RETRY_BASE_DELAY_MS;
+
+    const retryDelayMs =
+      Number.isFinite(
+        retryAfterSeconds,
+      ) &&
+        retryAfterSeconds >= 0
+        ? retryAfterSeconds * 1000
+        : fallbackDelayMs;
+
+    await new Promise<void>(
+      (resolve) => {
+        setTimeout(
+          resolve,
+          retryDelayMs,
+        );
+      },
     );
   }
 
-  return await response.json();
+  throw new Error(
+    "Scorecard fetch exhausted retry attempts",
+  );
 }
 
 Deno.serve(async (req) => {
