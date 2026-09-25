@@ -22,6 +22,20 @@ function revalidateTeamPage(teamId: string) {
   revalidatePath(`/portal/team-admin/teams/${teamId}`);
 }
 
+function revalidateFixtureManagement(
+  teamId: string,
+  matchId?: string,
+) {
+  revalidateTeamPage(teamId);
+
+  if (matchId) {
+    revalidatePath(`/portal/team-admin/fixtures/${matchId}`);
+    revalidatePath(
+      `/portal/team-admin/fixtures/${matchId}/selection`,
+    );
+  }
+}
+
 async function requireSignedInUser() {
   const supabase = await createClient();
 
@@ -155,7 +169,7 @@ export async function removePlayerFromTeam(
 
     return {
       ok: true,
-      message: "Player removed from the team successfully.",
+      message: "Player from the team successfully.",
     };
   } catch (error) {
     return {
@@ -179,7 +193,8 @@ export async function createAdHocTeamMatch(
   try {
     const cleanedTeamId = teamId.trim();
     const cleanedMatchDate = matchDate.trim();
-    const cleanedStartDateTime = startDateTime?.trim() || null;
+    const cleanedStartDateTime =
+      startDateTime?.trim() || null;
     const cleanedFixtureLabel = fixtureLabel.trim();
     const cleanedOpponentDisplayName =
       opponentDisplayName.trim();
@@ -234,7 +249,9 @@ export async function createAdHocTeamMatch(
 
     if (
       cleanedHomeAway &&
-      !["Home", "Away", "Neutral"].includes(cleanedHomeAway)
+      !["Home", "Away", "Neutral"].includes(
+        cleanedHomeAway,
+      )
     ) {
       return {
         ok: false,
@@ -245,7 +262,9 @@ export async function createAdHocTeamMatch(
 
     if (
       cleanedStartDateTime &&
-      Number.isNaN(new Date(cleanedStartDateTime).getTime())
+      Number.isNaN(
+        new Date(cleanedStartDateTime).getTime(),
+      )
     ) {
       return {
         ok: false,
@@ -298,7 +317,10 @@ export async function createAdHocTeamMatch(
       };
     }
 
-    revalidateTeamPage(cleanedTeamId);
+    revalidateFixtureManagement(
+      cleanedTeamId,
+      matchId,
+    );
 
     return {
       ok: true,
@@ -361,7 +383,10 @@ export async function openTeamMatchAvailability(
       };
     }
 
-    revalidateTeamPage(cleanedTeamId);
+    revalidateFixtureManagement(
+      cleanedTeamId,
+      cleanedMatchId,
+    );
 
     return {
       ok: true,
@@ -378,6 +403,7 @@ export async function openTeamMatchAvailability(
 export async function closeMatchAvailability(
   pollId: number,
   teamId: string,
+  matchId?: string,
 ): Promise<TeamAdminActionResult> {
   try {
     if (!Number.isInteger(pollId) || pollId <= 0) {
@@ -388,6 +414,7 @@ export async function closeMatchAvailability(
     }
 
     const cleanedTeamId = teamId.trim();
+    const cleanedMatchId = matchId?.trim();
 
     if (!cleanedTeamId) {
       return {
@@ -421,7 +448,10 @@ export async function closeMatchAvailability(
       };
     }
 
-    revalidateTeamPage(cleanedTeamId);
+    revalidateFixtureManagement(
+      cleanedTeamId,
+      cleanedMatchId,
+    );
 
     return {
       ok: true,
@@ -438,6 +468,7 @@ export async function closeMatchAvailability(
 export async function reopenMatchAvailability(
   pollId: number,
   teamId: string,
+  matchId?: string,
 ): Promise<TeamAdminActionResult> {
   try {
     if (!Number.isInteger(pollId) || pollId <= 0) {
@@ -448,6 +479,7 @@ export async function reopenMatchAvailability(
     }
 
     const cleanedTeamId = teamId.trim();
+    const cleanedMatchId = matchId?.trim();
 
     if (!cleanedTeamId) {
       return {
@@ -481,7 +513,10 @@ export async function reopenMatchAvailability(
       };
     }
 
-    revalidateTeamPage(cleanedTeamId);
+    revalidateFixtureManagement(
+      cleanedTeamId,
+      cleanedMatchId,
+    );
 
     return {
       ok: true,

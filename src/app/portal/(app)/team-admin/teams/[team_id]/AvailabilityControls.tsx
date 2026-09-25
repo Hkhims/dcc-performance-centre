@@ -38,11 +38,13 @@ export default function AvailabilityControls({
         result = await closeMatchAvailability(
           pollId,
           teamId,
+          matchId,
         );
       } else {
         result = await reopenMatchAvailability(
           pollId,
           teamId,
+          matchId,
         );
       }
 

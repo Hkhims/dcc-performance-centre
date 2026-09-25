@@ -9,6 +9,8 @@ type SelectionActionResult = {
   selectionId?: number;
 };
 
+export type SelectionRole = "Playing" | "Reserve";
+
 function errorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -22,6 +24,12 @@ function revalidateSelection(matchId: string) {
     `/portal/team-admin/fixtures/${matchId}/selection`,
   );
   revalidatePath("/portal/team-admin");
+}
+
+function isSelectionRole(
+  value: string,
+): value is SelectionRole {
+  return value === "Playing" || value === "Reserve";
 }
 
 async function requireSignedInUser() {
@@ -98,17 +106,20 @@ export async function addPlayerToSelection(
   matchId: string,
   selectionId: number,
   playerId: string,
+  selectionRole: SelectionRole,
 ): Promise<SelectionActionResult> {
   try {
     if (
       !matchId.trim() ||
       !Number.isInteger(selectionId) ||
       selectionId <= 0 ||
-      !playerId.trim()
+      !playerId.trim() ||
+      !isSelectionRole(selectionRole)
     ) {
       return {
         ok: false,
-        message: "A valid selection and player are required.",
+        message:
+          "A valid selection, player and selection role are required.",
       };
     }
 
@@ -127,6 +138,7 @@ export async function addPlayerToSelection(
         target_selection_id: selectionId,
         target_player_id: playerId,
         target_batting_position: null,
+        target_selection_role: selectionRole,
       },
     );
 
@@ -141,7 +153,73 @@ export async function addPlayerToSelection(
 
     return {
       ok: true,
-      message: "Player added to the selection.",
+      message:
+        selectionRole === "Reserve"
+          ? "Player added as a reserve."
+          : "Player added to the playing team.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
+export async function setSelectionPlayerRole(
+  matchId: string,
+  selectionId: number,
+  playerId: string,
+  selectionRole: SelectionRole,
+): Promise<SelectionActionResult> {
+  try {
+    if (
+      !matchId.trim() ||
+      !Number.isInteger(selectionId) ||
+      selectionId <= 0 ||
+      !playerId.trim() ||
+      !isSelectionRole(selectionRole)
+    ) {
+      return {
+        ok: false,
+        message:
+          "A valid selection, player and selection role are required.",
+      };
+    }
+
+    const { supabase, signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const { error } = await supabase.rpc(
+      "set_match_selection_player_role",
+      {
+        target_selection_id: selectionId,
+        target_player_id: playerId,
+        target_selection_role: selectionRole,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidateSelection(matchId);
+
+    return {
+      ok: true,
+      message:
+        selectionRole === "Reserve"
+          ? "Player moved to Reserve Players."
+          : "Player moved to the playing team.",
     };
   } catch (error) {
     return {
@@ -206,12 +284,11 @@ export async function removePlayerFromSelection(
     };
   }
 }
-
-export async function setSelectionBattingPosition(
+export async function moveSelectionPlayer(
   matchId: string,
   selectionId: number,
   playerId: string,
-  battingPosition: number | null,
+  direction: "Up" | "Down",
 ): Promise<SelectionActionResult> {
   try {
     if (
@@ -219,13 +296,11 @@ export async function setSelectionBattingPosition(
       !Number.isInteger(selectionId) ||
       selectionId <= 0 ||
       !playerId.trim() ||
-      (battingPosition !== null &&
-        (!Number.isInteger(battingPosition) ||
-          battingPosition < 1))
+      (direction !== "Up" && direction !== "Down")
     ) {
       return {
         ok: false,
-        message: "A valid batting position is required.",
+        message: "A valid player and direction are required.",
       };
     }
 
@@ -239,11 +314,11 @@ export async function setSelectionBattingPosition(
     }
 
     const { error } = await supabase.rpc(
-      "set_match_selection_batting_position",
+      "move_match_selection_player",
       {
         target_selection_id: selectionId,
         target_player_id: playerId,
-        target_batting_position: battingPosition,
+        target_direction: direction,
       },
     );
 
@@ -258,7 +333,120 @@ export async function setSelectionBattingPosition(
 
     return {
       ok: true,
-      message: "Batting position updated.",
+      message:
+        direction === "Up"
+          ? "Player moved up."
+          : "Player moved down.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+export async function setSelectionPlayerCar(
+  matchId: string,
+  selectionId: number,
+  playerId: string,
+  hasCar: boolean,
+): Promise<SelectionActionResult> {
+  try {
+    if (
+      !matchId.trim() ||
+      !Number.isInteger(selectionId) ||
+      selectionId <= 0 ||
+      !playerId.trim()
+    ) {
+      return {
+        ok: false,
+        message: "A valid selection and player are required.",
+      };
+    }
+
+    const { supabase, signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const { error } = await supabase.rpc(
+      "set_match_selection_player_car",
+      {
+        target_selection_id: selectionId,
+        target_player_id: playerId,
+        target_has_car: hasCar,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidateSelection(matchId);
+
+    return {
+      ok: true,
+      message: hasCar
+        ? "Car added."
+        : "Car removed.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
+export async function createMatchSelectionFromPrevious(
+  matchId: string,
+  teamId: string,
+): Promise<SelectionActionResult> {
+  try {
+    if (!matchId.trim() || !teamId.trim()) {
+      return {
+        ok: false,
+        message: "Match and team are required.",
+      };
+    }
+
+    const { supabase, signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const { data, error } = await supabase.rpc(
+      "create_match_selection_from_previous",
+      {
+        target_match_id: matchId,
+        target_team_id: teamId,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidateSelection(matchId);
+
+    return {
+      ok: true,
+      message: "Previous team copied.",
+      selectionId: Number(data),
     };
   } catch (error) {
     return {
