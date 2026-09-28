@@ -69,9 +69,24 @@ export type OverEndedEvent = {
   type: "OVER_ENDED";
 };
 
+export type BatterRetiredEvent = {
+  id: string;
+  type: "BATTER_RETIRED";
+  batterId: ParticipantId;
+};
+
+export type BatterReturnedEvent = {
+  id: string;
+  type: "BATTER_RETURNED";
+  batterId: ParticipantId;
+  end: "STRIKER" | "NON_STRIKER";
+};
+
 export type CricketEvent =
   | DeliveryEvent
-  | OverEndedEvent;
+  | OverEndedEvent
+  | BatterRetiredEvent
+  | BatterReturnedEvent;
 
 export type BatterState = {
   participantId: ParticipantId;
@@ -80,6 +95,7 @@ export type BatterState = {
   fours: number;
   sixes: number;
   dismissed: boolean;
+  retired: boolean;
 };
 
 export type BowlerState = {

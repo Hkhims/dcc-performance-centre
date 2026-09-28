@@ -79,6 +79,7 @@ describe("deriveInningsState", () => {
       fours: 0,
       sixes: 1,
       dismissed: true,
+      retired: false,
     });
     expect(state.batters.venky).toEqual({
       participantId: "venky",
@@ -87,6 +88,7 @@ describe("deriveInningsState", () => {
       fours: 1,
       sixes: 0,
       dismissed: false,
+      retired: false,
     });
     expect(state.bowlers["bowler-1"]).toEqual({
       participantId: "bowler-1",
@@ -313,6 +315,7 @@ describe("deriveInningsState", () => {
       fours: 1,
       sixes: 0,
       dismissed: false,
+      retired: false,
     });
     expect(state.legalBalls).toBe(0);
     expect(state.legalBallsInCurrentOver).toBe(0);
@@ -442,6 +445,7 @@ describe("deriveInningsState", () => {
       fours: 0,
       sixes: 0,
       dismissed: false,
+      retired: false,
     });
     expect(state.bowlers["bowler-1"].runsConceded).toBe(0);
     expect(state.bowlers["bowler-1"].legalBalls).toBe(1);
@@ -728,6 +732,101 @@ it.each([
     expect(state.strikerId).toBeNull();
     expect(state.nonStrikerId).toBe("venky");
   });
+  it("scores a leg-bye plus striker run-out with correct scoring, bowling and end state", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "leg-bye-striker-run-out",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          legByes: 1,
+        },
+        running: {
+          completedRuns: 1,
+        },
+        wicket: {
+          type: "RUN_OUT",
+          dismissedBatterId: "himanshu",
+          fielderIds: ["fielder-1"],
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+
+    expect(state.extras.legByes).toBe(1);
+    expect(state.extras.total).toBe(1);
+
+    expect(state.legalBalls).toBe(1);
+    expect(state.legalBallsInCurrentOver).toBe(1);
+
+    expect(state.batters.himanshu.runs).toBe(0);
+    expect(state.batters.himanshu.balls).toBe(1);
+    expect(state.batters.himanshu.dismissed).toBe(true);
+
+    expect(state.bowlers["bowler-1"].legalBalls).toBe(1);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(0);
+
+    expect(state.fielders["fielder-1"].runOuts).toBe(1);
+
+    expect(state.strikerId).toBe("venky");
+    expect(state.nonStrikerId).toBeNull();
+  });
+
+  it("scores a leg-bye plus non-striker run-out with correct scoring, bowling and end state", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "leg-bye-non-striker-run-out",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          legByes: 1,
+        },
+        running: {
+          completedRuns: 1,
+        },
+        wicket: {
+          type: "RUN_OUT",
+          dismissedBatterId: "venky",
+          fielderIds: ["fielder-1"],
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+
+    expect(state.extras.legByes).toBe(1);
+    expect(state.extras.total).toBe(1);
+
+    expect(state.legalBalls).toBe(1);
+    expect(state.legalBallsInCurrentOver).toBe(1);
+
+    expect(state.batters.himanshu.runs).toBe(0);
+    expect(state.batters.himanshu.balls).toBe(1);
+    expect(state.batters.venky.dismissed).toBe(true);
+
+    expect(state.bowlers["bowler-1"].legalBalls).toBe(1);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(0);
+
+    expect(state.fielders["fielder-1"].runOuts).toBe(1);
+
+    expect(state.strikerId).toBeNull();
+    expect(state.nonStrikerId).toBe("himanshu");
+  });
 it("preserves strike when two runs are completed but one is called short", () => {
   const events: CricketEvent[] = [
     {
@@ -755,6 +854,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
     fours: 0,
     sixes: 0,
     dismissed: false,
+    retired: false,
   });
   expect(state.batters.venky).toEqual({
     participantId: "venky",
@@ -763,6 +863,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
     fours: 0,
     sixes: 0,
     dismissed: false,
+    retired: false,
   });
   expect(state.bowlers["bowler-1"]).toEqual({
     participantId: "bowler-1",
@@ -955,6 +1056,197 @@ it("preserves strike when two runs are completed but one is called short", () =>
     expect(state.wickets).toBe(3);
     expect(state.bowlers["bowler-1"].wickets).toBe(3);
     expect(state.fielders).toEqual({});
+  });
+    it("retires the striker without recording a dismissal or changing the score", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "delivery-before-retirement",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "himanshu-retired",
+        type: "BATTER_RETIRED",
+        batterId: "himanshu",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.legalBalls).toBe(1);
+
+    expect(state.batters.himanshu.dismissed).toBe(false);
+    expect(state.batters.himanshu.retired).toBe(true);
+    expect(state.batters.himanshu.balls).toBe(1);
+
+    expect(state.strikerId).toBeNull();
+    expect(state.nonStrikerId).toBe("venky");
+
+    expect(state.bowlers["bowler-1"].legalBalls).toBe(1);
+    expect(state.bowlers["bowler-1"].wickets).toBe(0);
+  });
+
+  it("retires the non-striker without disturbing the striker", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "delivery-before-non-striker-retirement",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "venky-retired",
+        type: "BATTER_RETIRED",
+        batterId: "venky",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.wickets).toBe(0);
+    expect(state.batters.venky.dismissed).toBe(false);
+    expect(state.batters.venky.retired).toBe(true);
+
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBeNull();
+  });
+
+  it("preserves a batter's existing figures while retired", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "four-before-retirement",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "himanshu-retired-after-four",
+        type: "BATTER_RETIRED",
+        batterId: "himanshu",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.batters.himanshu).toEqual({
+      participantId: "himanshu",
+      runs: 4,
+      balls: 1,
+      fours: 1,
+      sixes: 0,
+      dismissed: false,
+      retired: true,
+    });
+
+    expect(state.runs).toBe(4);
+    expect(state.wickets).toBe(0);
+  });
+
+  it("returns a retired batter to the explicitly selected batting end", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "delivery-before-return",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "himanshu-retired-before-return",
+        type: "BATTER_RETIRED",
+        batterId: "himanshu",
+      },
+      {
+        id: "himanshu-returned",
+        type: "BATTER_RETURNED",
+        batterId: "himanshu",
+        end: "STRIKER",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.batters.himanshu.retired).toBe(false);
+    expect(state.batters.himanshu.dismissed).toBe(false);
+
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBe("venky");
+
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.legalBalls).toBe(1);
+  });
+
+  it("ignores a return when the requested batting end is occupied by another batter", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "delivery-before-occupied-return",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "reserve-batter-retired",
+        type: "BATTER_RETIRED",
+        batterId: "reserve-batter",
+      },
+      {
+        id: "reserve-batter-invalid-return",
+        type: "BATTER_RETURNED",
+        batterId: "reserve-batter",
+        end: "STRIKER",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBe("venky");
+    expect(state.batters["reserve-batter"].retired).toBe(true);
+  });
+
+  it("does not allow a dismissed batter to return", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "himanshu-dismissed",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        wicket: {
+          type: "BOWLED",
+          dismissedBatterId: "himanshu",
+        },
+      },
+      {
+        id: "invalid-dismissed-return",
+        type: "BATTER_RETURNED",
+        batterId: "himanshu",
+        end: "STRIKER",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.wickets).toBe(1);
+    expect(state.batters.himanshu.dismissed).toBe(true);
+    expect(state.batters.himanshu.retired).toBe(false);
+
+    expect(state.strikerId).toBeNull();
+    expect(state.nonStrikerId).toBe("venky");
   });
   it("replays deterministically from the same event ledger", () => {
     expect(

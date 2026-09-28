@@ -17,6 +17,7 @@ function createBatter(
     fours: 0,
     sixes: 0,
     dismissed: false,
+    retired: false,
   };
 }
 
@@ -68,6 +69,21 @@ export function deriveInningsState(
     fielders: {},
   };
 
+  function getBatter(
+    participantId: ParticipantId,
+  ): BatterState {
+    const existing = state.batters[participantId];
+
+    if (existing) {
+      return existing;
+    }
+
+    const batter = createBatter(participantId);
+    state.batters[participantId] = batter;
+
+    return batter;
+  }
+
   function getFielder(
     participantId: ParticipantId,
   ): FielderState {
@@ -102,20 +118,73 @@ export function deriveInningsState(
       continue;
     }
 
-    const striker =
-      state.batters[event.strikerId] ??
-      createBatter(event.strikerId);
+    if (event.type === "BATTER_RETIRED") {
+      const batter = getBatter(event.batterId);
 
-    const nonStriker =
-      state.batters[event.nonStrikerId] ??
-      createBatter(event.nonStrikerId);
+      if (batter.dismissed) {
+        continue;
+      }
+
+      batter.retired = true;
+
+      if (state.strikerId === event.batterId) {
+        state.strikerId = null;
+      }
+
+      if (state.nonStrikerId === event.batterId) {
+        state.nonStrikerId = null;
+      }
+
+      continue;
+    }
+
+    if (event.type === "BATTER_RETURNED") {
+      const batter = getBatter(event.batterId);
+
+      if (batter.dismissed || !batter.retired) {
+        continue;
+      }
+
+      if (event.end === "STRIKER") {
+        if (
+          state.strikerId !== null &&
+          state.strikerId !== event.batterId
+        ) {
+          continue;
+        }
+
+        if (state.nonStrikerId === event.batterId) {
+          state.nonStrikerId = null;
+        }
+
+        state.strikerId = event.batterId;
+      } else {
+        if (
+          state.nonStrikerId !== null &&
+          state.nonStrikerId !== event.batterId
+        ) {
+          continue;
+        }
+
+        if (state.strikerId === event.batterId) {
+          state.strikerId = null;
+        }
+
+        state.nonStrikerId = event.batterId;
+      }
+
+      batter.retired = false;
+
+      continue;
+    }
+
+    const striker = getBatter(event.strikerId);
+    getBatter(event.nonStrikerId);
 
     const bowler =
       state.bowlers[event.bowlerId] ??
       createBowler(event.bowlerId);
 
-    state.batters[event.strikerId] = striker;
-    state.batters[event.nonStrikerId] = nonStriker;
     state.bowlers[event.bowlerId] = bowler;
 
     const wideRuns = event.extras?.wides ?? 0;
@@ -178,19 +247,12 @@ export function deriveInningsState(
         bowler.wickets += 1;
       }
 
-      const dismissedBatter =
-        state.batters[
-          event.wicket.dismissedBatterId
-        ] ??
-        createBatter(
-          event.wicket.dismissedBatterId,
-        );
+      const dismissedBatter = getBatter(
+        event.wicket.dismissedBatterId,
+      );
 
       dismissedBatter.dismissed = true;
-
-      state.batters[
-        event.wicket.dismissedBatterId
-      ] = dismissedBatter;
+      dismissedBatter.retired = false;
 
       switch (event.wicket.type) {
         case "CAUGHT": {
@@ -224,12 +286,8 @@ export function deriveInningsState(
           const uniqueFielderIds =
             new Set(event.wicket.fielderIds);
 
-          for (
-            const fielderId
-            of uniqueFielderIds
-          ) {
-            const fielder =
-              getFielder(fielderId);
+          for (const fielderId of uniqueFielderIds) {
+            const fielder = getFielder(fielderId);
 
             fielder.runOuts += 1;
           }
