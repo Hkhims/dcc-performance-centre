@@ -1263,4 +1263,1430 @@ it("preserves strike when two runs are completed but one is called short", () =>
     deriveInningsState(events);
     expect(events).toEqual(originalEvents);
   });
+  it("derives chase context from a target and innings ball limit", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "chase-1",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "chase-2",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 11,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.chase).toEqual({
+      target: 11,
+      runsRequired: 6,
+      ballsRemaining: 10,
+      targetReached: false,
+      scoresLevel: false,
+    });
+  });
+
+  it("marks the target as reached as soon as the chasing side gets there", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "winning-six",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 6,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.chase).toEqual({
+      target: 6,
+      runsRequired: 0,
+      ballsRemaining: 11,
+      targetReached: true,
+      scoresLevel: false,
+    });
+  });
+
+  it("recognises level scores without treating them as a successful chase", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "level-scores",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 5,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 6,
+      scheduledLegalBalls: 6,
+    });
+
+    expect(state.chase).toEqual({
+      target: 6,
+      runsRequired: 1,
+      ballsRemaining: 5,
+      targetReached: false,
+      scoresLevel: true,
+    });
+  });
+
+  it("does not consume a ball from the chase for a wide", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "chase-wide",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+        },
+        running: {
+          completedRuns: 0,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 10,
+      scheduledLegalBalls: 6,
+    });
+
+    expect(state.runs).toBe(1);
+    expect(state.chase?.runsRequired).toBe(9);
+    expect(state.chase?.ballsRemaining).toBe(6);
+  });
+
+  it("does not consume a ball from the chase for a no-ball", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "chase-no-ball",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+        },
+        running: {
+          completedRuns: 0,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 10,
+      scheduledLegalBalls: 6,
+    });
+
+    expect(state.runs).toBe(1);
+    expect(state.chase?.runsRequired).toBe(9);
+    expect(state.chase?.ballsRemaining).toBe(6);
+  });
+    it("adds batting-side penalty runs without consuming a delivery", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-single",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+      {
+        id: "batting-penalty",
+        type: "PENALTY_RUNS",
+        runs: 5,
+        awardedTo: "BATTING",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(6);
+    expect(state.extras.penalty).toBe(5);
+    expect(state.extras.total).toBe(5);
+
+    expect(state.legalBalls).toBe(1);
+    expect(state.legalBallsInCurrentOver).toBe(1);
+
+    expect(state.batters.himanshu.runs).toBe(1);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(1);
+
+    expect(state.strikerId).toBe("venky");
+    expect(state.nonStrikerId).toBe("himanshu");
+
+    expect(state.oppositionPenaltyRuns).toBe(0);
+  });
+
+  it("records opposition penalty runs without changing the batting innings score", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "opposition-penalty",
+        type: "PENALTY_RUNS",
+        runs: 5,
+        awardedTo: "OPPOSITION",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.extras.penalty).toBe(0);
+    expect(state.extras.total).toBe(0);
+    expect(state.oppositionPenaltyRuns).toBe(5);
+
+    expect(state.legalBalls).toBe(1);
+    expect(state.batters.himanshu.runs).toBe(4);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(4);
+  });
+
+  it("allows batting-side penalty runs to complete a chase", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "chase-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "winning-penalty",
+        type: "PENALTY_RUNS",
+        runs: 5,
+        awardedTo: "BATTING",
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 9,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.runs).toBe(9);
+    expect(state.chase).toEqual({
+      target: 9,
+      runsRequired: 0,
+      ballsRemaining: 11,
+      targetReached: true,
+      scoresLevel: false,
+    });
+        expect(state.completion).toEqual({
+      completed: true,
+      reason: "TARGET_REACHED",
+    });
+  });
+    it("marks a chase as complete when the target is reached", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "winning-boundary",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 4,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "TARGET_REACHED",
+    });
+  });
+
+  it("marks an innings as complete when its scheduled legal balls are exhausted", () => {
+    const events: CricketEvent[] = Array.from(
+      { length: 6 },
+      (_, index): CricketEvent => ({
+        id: `ball-${index + 1}`,
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      }),
+    );
+
+    const state = deriveInningsState(events, {
+      scheduledLegalBalls: 6,
+    });
+
+    expect(state.legalBalls).toBe(6);
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "BALL_LIMIT_REACHED",
+    });
+  });
+
+  it("allows the scorer to end an innings manually", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "manual-end",
+        type: "INNINGS_ENDED",
+        reason: "MANUAL",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "MANUAL",
+    });
+  });
+
+  it("ignores later scoring events after an explicit innings end", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "innings-end",
+        type: "INNINGS_ENDED",
+        reason: "MANUAL",
+      },
+      {
+        id: "should-not-count",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.legalBalls).toBe(1);
+    expect(state.batters.himanshu.runs).toBe(4);
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "MANUAL",
+    });
+  });
+    it("starts a break without changing the innings score", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "rain-break",
+        type: "BREAK_STARTED",
+        reason: "RAIN",
+        note: "Heavy shower",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.legalBalls).toBe(1);
+    expect(state.break).toEqual({
+      active: true,
+      reason: "RAIN",
+      note: "Heavy shower",
+    });
+  });
+
+  it("ignores scoring events while a break is active", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-single",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+      {
+        id: "rain-break",
+        type: "BREAK_STARTED",
+        reason: "RAIN",
+      },
+      {
+        id: "should-not-count",
+        type: "DELIVERY",
+        strikerId: "venky",
+        nonStrikerId: "himanshu",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.legalBalls).toBe(1);
+    expect(state.batters.venky.runs).toBe(0);
+    expect(state.break.active).toBe(true);
+  });
+
+  it("resumes scoring after the break ends", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-single",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+      {
+        id: "rain-break",
+        type: "BREAK_STARTED",
+        reason: "RAIN",
+      },
+      {
+        id: "resume",
+        type: "BREAK_ENDED",
+      },
+      {
+        id: "after-resume",
+        type: "DELIVERY",
+        strikerId: "venky",
+        nonStrikerId: "himanshu",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(5);
+    expect(state.legalBalls).toBe(2);
+    expect(state.batters.venky.runs).toBe(4);
+    expect(state.break).toEqual({
+      active: false,
+      reason: null,
+      note: null,
+    });
+  });
+
+  it("ignores a second break start while play is already suspended", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "first-break",
+        type: "BREAK_STARTED",
+        reason: "RAIN",
+        note: "Initial shower",
+      },
+      {
+        id: "duplicate-break",
+        type: "BREAK_STARTED",
+        reason: "BAD_LIGHT",
+        note: "Should not replace active break",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.break).toEqual({
+      active: true,
+      reason: "RAIN",
+      note: "Initial shower",
+    });
+  });
+    it("derives the original playing conditions when no revision has occurred", () => {
+    const state = deriveInningsState([], {
+      target: 121,
+      scheduledLegalBalls: 120,
+    });
+
+    expect(state.playingConditions).toEqual({
+      target: 121,
+      scheduledLegalBalls: 120,
+    });
+  });
+
+  it("reduces the remaining ball limit after a playing-conditions change", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "ball-1",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+      {
+        id: "rain-break",
+        type: "BREAK_STARTED",
+        reason: "RAIN",
+      },
+      {
+        id: "resume",
+        type: "BREAK_ENDED",
+      },
+      {
+        id: "reduced-overs",
+        type: "PLAYING_CONDITIONS_CHANGED",
+        scheduledLegalBalls: 60,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      scheduledLegalBalls: 120,
+    });
+
+    expect(state.playingConditions).toEqual({
+      target: null,
+      scheduledLegalBalls: 60,
+    });
+
+    expect(state.legalBalls).toBe(1);
+  });
+
+  it("uses a revised target for the chase", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-six",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+      },
+      {
+        id: "revised-target",
+        type: "TARGET_REVISED",
+        target: 10,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 20,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.playingConditions.target).toBe(10);
+
+    expect(state.chase).toEqual({
+      target: 10,
+      runsRequired: 4,
+      ballsRemaining: 11,
+      targetReached: false,
+      scoresLevel: false,
+    });
+  });
+
+  it("completes the chase immediately when a revised target is already reached", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "opening-six",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+      },
+      {
+        id: "target-revised-down",
+        type: "TARGET_REVISED",
+        target: 6,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      target: 20,
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.chase?.target).toBe(6);
+    expect(state.chase?.runsRequired).toBe(0);
+    expect(state.chase?.targetReached).toBe(true);
+
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "TARGET_REACHED",
+    });
+  });
+
+  it("completes the innings when a reduced ball limit has already been reached", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "ball-1",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "ball-2",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+      },
+      {
+        id: "reduced-limit",
+        type: "PLAYING_CONDITIONS_CHANGED",
+        scheduledLegalBalls: 2,
+      },
+    ];
+
+    const state = deriveInningsState(events, {
+      scheduledLegalBalls: 12,
+    });
+
+    expect(state.playingConditions.scheduledLegalBalls).toBe(2);
+
+    expect(state.completion).toEqual({
+      completed: true,
+      reason: "BALL_LIMIT_REACHED",
+    });
+  });
+    it("tracks the current wicketkeeper without changing the score", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "keeper-change",
+        type: "WICKETKEEPER_CHANGED",
+        wicketkeeperId: "keeper-1",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentWicketkeeperId).toBe("keeper-1");
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.legalBalls).toBe(0);
+  });
+
+  it("allows the wicketkeeper to change during an innings", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "first-keeper",
+        type: "WICKETKEEPER_CHANGED",
+        wicketkeeperId: "keeper-1",
+      },
+      {
+        id: "second-keeper",
+        type: "WICKETKEEPER_CHANGED",
+        wicketkeeperId: "keeper-2",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentWicketkeeperId).toBe("keeper-2");
+  });
+
+  it("preserves explicit stumping attribution after a wicketkeeper change", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "first-keeper",
+        type: "WICKETKEEPER_CHANGED",
+        wicketkeeperId: "keeper-1",
+      },
+      {
+        id: "second-keeper",
+        type: "WICKETKEEPER_CHANGED",
+        wicketkeeperId: "keeper-2",
+      },
+      {
+        id: "stumping",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        wicket: {
+          type: "STUMPED",
+          dismissedBatterId: "himanshu",
+          fielderId: "keeper-2",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentWicketkeeperId).toBe("keeper-2");
+    expect(state.fielders["keeper-2"].stumpings).toBe(1);
+    expect(state.fielders["keeper-1"]).toBeUndefined();
+  });
+    it("tracks the current scorer without changing the innings", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "handover-1",
+        type: "SCORER_HANDOVER",
+        scorerId: "scorer-a",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentScorerId).toBe("scorer-a");
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.legalBalls).toBe(0);
+  });
+
+  it("uses the latest scorer handover as the current scorer", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "handover-1",
+        type: "SCORER_HANDOVER",
+        scorerId: "scorer-a",
+      },
+      {
+        id: "handover-2",
+        type: "SCORER_HANDOVER",
+        scorerId: "scorer-b",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentScorerId).toBe("scorer-b");
+  });
+
+  it("preserves the cricket state across a scorer handover", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "ball-before-handover",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+      },
+      {
+        id: "handover",
+        type: "SCORER_HANDOVER",
+        scorerId: "scorer-b",
+      },
+      {
+        id: "ball-after-handover",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.currentScorerId).toBe("scorer-b");
+    expect(state.runs).toBe(5);
+    expect(state.legalBalls).toBe(2);
+    expect(state.batters.himanshu.runs).toBe(5);
+    expect(state.batters.himanshu.balls).toBe(2);
+  });
+    it("ignores a delivery that is both a wide and a no-ball", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-wide-no-ball",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+          noBalls: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+    expect(state.batters).toEqual({});
+    expect(state.bowlers).toEqual({});
+  });
+
+  it("ignores bat runs recorded on a wide", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-wide-bat-runs",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+        extras: {
+          wides: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+    expect(state.batters).toEqual({});
+  });
+
+  it("ignores a delivery containing both byes and leg-byes", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-byes-leg-byes",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          byes: 1,
+          legByes: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+  });
+
+  it("ignores a bowled dismissal from a wide", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-wide-bowled",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+        },
+        wicket: {
+          type: "BOWLED",
+          dismissedBatterId: "himanshu",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.batters).toEqual({});
+    expect(state.bowlers).toEqual({});
+  });
+
+  it("ignores a caught dismissal from a no-ball", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-no-ball-caught",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+        },
+        wicket: {
+          type: "CAUGHT",
+          dismissedBatterId: "himanshu",
+          fielderId: "fielder-1",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.fielders).toEqual({});
+  });
+
+  it("allows a run-out from a no-ball", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "valid-no-ball-run-out",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+        },
+        wicket: {
+          type: "RUN_OUT",
+          dismissedBatterId: "himanshu",
+          fielderIds: ["fielder-1"],
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(0);
+  });
+
+  it("allows hit wicket from a no-ball", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "valid-no-ball-hit-wicket",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+        },
+        wicket: {
+          type: "HIT_WICKET",
+          dismissedBatterId: "himanshu",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(1);
+  });
+    it("ignores a wide combined with byes", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-wide-byes",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+          byes: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+  });
+
+  it("allows a stumping from a wide", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "valid-wide-stumped",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+        },
+        wicket: {
+          type: "STUMPED",
+          dismissedBatterId: "himanshu",
+          fielderId: "keeper-1",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(1);
+    expect(state.fielders["keeper-1"].stumpings).toBe(1);
+  });
+
+  it("allows a run-out from a wide", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "valid-wide-run-out",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: 1,
+        },
+        wicket: {
+          type: "RUN_OUT",
+          dismissedBatterId: "venky",
+          fielderIds: ["fielder-1"],
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.wickets).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.bowlers["bowler-1"].wickets).toBe(0);
+  });
+
+  it("ignores a dismissal of a batter who was not involved in the delivery", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-dismissed-batter",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        wicket: {
+          type: "BOWLED",
+          dismissedBatterId: "someone-else",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.wickets).toBe(0);
+    expect(state.legalBalls).toBe(0);
+    expect(state.batters).toEqual({});
+  });
+
+  it("ignores negative batting runs", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-negative-runs",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: -1 as unknown as 0,
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+    expect(state.batters).toEqual({});
+  });
+
+  it("ignores negative extra runs", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "invalid-negative-extras",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          wides: -1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(0);
+    expect(state.legalBalls).toBe(0);
+    expect(state.batters).toEqual({});
+  });
+  it("voids an earlier delivery without deleting it from the event ledger", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 1,
+    },
+    {
+      id: "ball-2",
+      type: "DELIVERY",
+      strikerId: "venky",
+      nonStrikerId: "himanshu",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "undo-ball-2",
+      type: "EVENT_VOIDED",
+      targetEventId: "ball-2",
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(events).toHaveLength(3);
+  expect(state.runs).toBe(1);
+  expect(state.legalBalls).toBe(1);
+  expect(state.batters.himanshu.runs).toBe(1);
+  expect(state.batters.venky).toEqual(
+  expect.objectContaining({
+    participantId: "venky",
+    runs: 0,
+    balls: 0,
+    dismissed: false,
+  }),
+);
+});
+it("replaces an earlier delivery and replays the innings from corrected history", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "ball-2",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 1,
+    },
+    {
+      id: "correct-ball-1",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-corrected",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(3);
+  expect(state.legalBalls).toBe(2);
+  expect(state.batters.himanshu.runs).toBe(3);
+});
+it("preserves explicitly recorded later batting participants after a historical correction", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 1,
+    },
+    {
+      id: "ball-2",
+      type: "DELIVERY",
+      strikerId: "venky",
+      nonStrikerId: "himanshu",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "correct-ball-1",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-corrected",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(6);
+  expect(state.legalBalls).toBe(2);
+  expect(state.strikerId).toBe("venky");
+expect(state.nonStrikerId).toBe("himanshu");
+});
+it("ignores a void event whose target does not exist", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "bad-undo",
+      type: "EVENT_VOIDED",
+      targetEventId: "missing-event",
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(4);
+  expect(state.legalBalls).toBe(1);
+});
+it("ignores an invalid replacement delivery", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "bad-correction",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-invalid",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+        extras: {
+          wides: 1,
+        },
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(4);
+  expect(state.legalBalls).toBe(1);
+});
+it("uses the latest valid replacement when the same event is corrected twice", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "first-correction",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-corrected-once",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+    {
+      id: "second-correction",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-corrected-twice",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(1);
+  expect(state.legalBalls).toBe(1);
+  expect(state.batters.himanshu.runs).toBe(1);
+});
+
+it("removes an event when it is voided after being replaced", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "correct-ball-1",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-corrected",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+    {
+      id: "undo-ball-1",
+      type: "EVENT_VOIDED",
+      targetEventId: "ball-1",
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(0);
+  expect(state.legalBalls).toBe(0);
+  expect(state.batters.himanshu).toBeUndefined();
+});
+
+it("restores a voided event when a later valid replacement is supplied", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "undo-ball-1",
+      type: "EVENT_VOIDED",
+      targetEventId: "ball-1",
+    },
+    {
+      id: "restore-ball-1",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-restored",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(2);
+  expect(state.legalBalls).toBe(1);
+  expect(state.batters.himanshu.runs).toBe(2);
+});
+
+it("keeps the latest valid replacement when a later replacement is invalid", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "ball-1",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "valid-correction",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-valid-correction",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 2,
+      },
+    },
+    {
+      id: "invalid-correction",
+      type: "EVENT_REPLACED",
+      targetEventId: "ball-1",
+      replacement: {
+        id: "ball-1-invalid-correction",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+        extras: {
+          wides: 1,
+        },
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(2);
+  expect(state.legalBalls).toBe(1);
+  expect(state.batters.himanshu.runs).toBe(2);
+});
 });

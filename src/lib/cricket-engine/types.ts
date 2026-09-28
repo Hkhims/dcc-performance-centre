@@ -82,11 +82,117 @@ export type BatterReturnedEvent = {
   end: "STRIKER" | "NON_STRIKER";
 };
 
-export type CricketEvent =
+export type PenaltyRunsEvent = {
+  id: string;
+  type: "PENALTY_RUNS";
+  runs: 5;
+  awardedTo: "BATTING" | "OPPOSITION";
+};
+
+export type InningsEndedReason =
+  | "TARGET_REACHED"
+  | "BALL_LIMIT_REACHED"
+  | "ALL_OUT"
+  | "DECLARED"
+  | "MANUAL";
+
+export type InningsEndedEvent = {
+  id: string;
+  type: "INNINGS_ENDED";
+  reason: "DECLARED" | "MANUAL";
+};
+
+export type BreakReason =
+  | "RAIN"
+  | "BAD_LIGHT"
+  | "INJURY"
+  | "DRINKS"
+  | "GROUND_CONDITIONS"
+  | "OTHER";
+
+export type BreakStartedEvent = {
+  id: string;
+  type: "BREAK_STARTED";
+  reason: BreakReason;
+  note?: string;
+};
+
+export type BreakEndedEvent = {
+  id: string;
+  type: "BREAK_ENDED";
+};
+
+export type PlayingConditionsChangedEvent = {
+  id: string;
+  type: "PLAYING_CONDITIONS_CHANGED";
+  scheduledLegalBalls: number;
+};
+
+export type TargetRevisedEvent = {
+  id: string;
+  type: "TARGET_REVISED";
+  target: number;
+};
+
+export type WicketkeeperChangedEvent = {
+  id: string;
+  type: "WICKETKEEPER_CHANGED";
+  wicketkeeperId: ParticipantId;
+};
+
+export type ScorerHandoverEvent = {
+  id: string;
+  type: "SCORER_HANDOVER";
+  scorerId: string;
+};
+
+export type CricketActionEvent =
   | DeliveryEvent
   | OverEndedEvent
   | BatterRetiredEvent
-  | BatterReturnedEvent;
+  | BatterReturnedEvent
+  | PenaltyRunsEvent
+  | InningsEndedEvent
+  | BreakStartedEvent
+  | BreakEndedEvent
+  | PlayingConditionsChangedEvent
+  | TargetRevisedEvent
+  | WicketkeeperChangedEvent
+  | ScorerHandoverEvent;
+
+export type EventVoidedEvent = {
+  id: string;
+  type: "EVENT_VOIDED";
+  targetEventId: string;
+};
+
+export type EventReplacedEvent = {
+  id: string;
+  type: "EVENT_REPLACED";
+  targetEventId: string;
+  replacement: CricketActionEvent;
+};
+
+export type CricketEvent =
+  | CricketActionEvent
+  | EventVoidedEvent
+  | EventReplacedEvent;
+
+export type EffectivePlayingConditions = {
+  target: number | null;
+  scheduledLegalBalls: number | null;
+};
+
+export type BreakState = {
+  active: boolean;
+  reason: BreakReason | null;
+  note: string | null;
+};
+
+export type InningsCompletionState = {
+  completed: boolean;
+  reason: InningsEndedReason | null;
+};
 
 export type BatterState = {
   participantId: ParticipantId;
@@ -121,6 +227,19 @@ export type ExtrasState = {
   total: number;
 };
 
+export type InningsPlayingConditions = {
+  target?: number;
+  scheduledLegalBalls?: number;
+};
+
+export type ChaseState = {
+  target: number;
+  runsRequired: number;
+  ballsRemaining: number | null;
+  targetReached: boolean;
+  scoresLevel: boolean;
+};
+
 export type InningsState = {
   runs: number;
   wickets: number;
@@ -135,6 +254,13 @@ export type InningsState = {
   batters: Record<ParticipantId, BatterState>;
   bowlers: Record<ParticipantId, BowlerState>;
   fielders: Record<ParticipantId, FielderState>;
+  chase: ChaseState | null;
+  oppositionPenaltyRuns: number;
+  completion: InningsCompletionState;
+  break: BreakState;
+  playingConditions: EffectivePlayingConditions;
+  currentWicketkeeperId: ParticipantId | null;
+  currentScorerId: string | null;
 };
 
 export function formatOvers(

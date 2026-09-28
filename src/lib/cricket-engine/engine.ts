@@ -1,8 +1,11 @@
 import type {
   BatterState,
   BowlerState,
+  CricketActionEvent,
   CricketEvent,
+  DeliveryEvent,
   FielderState,
+  InningsPlayingConditions,
   InningsState,
   ParticipantId,
 } from "./types";
@@ -42,9 +45,153 @@ function createFielder(
     runOuts: 0,
   };
 }
+function isValidDelivery(event: DeliveryEvent): boolean {
+  const wideRuns = event.extras?.wides ?? 0;
+  const noBallRuns = event.extras?.noBalls ?? 0;
+  const byeRuns = event.extras?.byes ?? 0;
+  const legByeRuns = event.extras?.legByes ?? 0;
 
+  const isWide = wideRuns > 0;
+  const isNoBall = noBallRuns > 0;
+    if (
+    event.batRuns < 0 ||
+    wideRuns < 0 ||
+    noBallRuns < 0 ||
+    byeRuns < 0 ||
+    legByeRuns < 0
+  ) {
+    return false;
+  }
+
+  if (isWide && isNoBall) {
+    return false;
+  }
+
+  if (
+    isWide &&
+    (
+      event.batRuns > 0 ||
+      byeRuns > 0 ||
+      legByeRuns > 0
+    )
+  ) {
+    return false;
+  }
+
+  if (byeRuns > 0 && legByeRuns > 0) {
+    return false;
+  }
+
+  if (!event.wicket) {
+    return true;
+  }
+    if (
+    event.wicket.dismissedBatterId !== event.strikerId &&
+    event.wicket.dismissedBatterId !== event.nonStrikerId
+  ) {
+    return false;
+  }
+  if (
+    isWide &&
+    (
+      event.wicket.type === "BOWLED" ||
+      event.wicket.type === "CAUGHT" ||
+      event.wicket.type === "LBW" ||
+      event.wicket.type === "HIT_WICKET" ||
+      event.wicket.type === "CAUGHT_AND_BOWLED"
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    isNoBall &&
+    (
+      event.wicket.type === "BOWLED" ||
+      event.wicket.type === "CAUGHT" ||
+      event.wicket.type === "LBW" ||
+      event.wicket.type === "STUMPED" ||
+      event.wicket.type === "CAUGHT_AND_BOWLED"
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+function resolveEffectiveEvents(
+  events: CricketEvent[],
+): CricketActionEvent[] {
+  const actionEvents = new Map<string, CricketActionEvent>();
+
+  for (const event of events) {
+    if (
+      event.type !== "EVENT_VOIDED" &&
+      event.type !== "EVENT_REPLACED"
+    ) {
+      actionEvents.set(event.id, event);
+    }
+  }
+
+  const voidedEventIds = new Set<string>();
+  const replacements = new Map<string, CricketActionEvent>();
+
+  for (const event of events) {
+    if (event.type === "EVENT_VOIDED") {
+      if (actionEvents.has(event.targetEventId)) {
+        voidedEventIds.add(event.targetEventId);
+        replacements.delete(event.targetEventId);
+      }
+
+      continue;
+    }
+
+    if (event.type === "EVENT_REPLACED") {
+      const original = actionEvents.get(event.targetEventId);
+
+      if (!original) {
+        continue;
+      }
+
+      if (
+        event.replacement.type === "DELIVERY" &&
+        !isValidDelivery(event.replacement)
+      ) {
+        continue;
+      }
+
+      voidedEventIds.delete(event.targetEventId);
+      replacements.set(
+        event.targetEventId,
+        event.replacement,
+      );
+    }
+  }
+
+  const effectiveEvents: CricketActionEvent[] = [];
+
+  for (const event of events) {
+    if (
+      event.type === "EVENT_VOIDED" ||
+      event.type === "EVENT_REPLACED"
+    ) {
+      continue;
+    }
+
+    if (voidedEventIds.has(event.id)) {
+      continue;
+    }
+
+    effectiveEvents.push(
+      replacements.get(event.id) ?? event,
+    );
+  }
+
+  return effectiveEvents;
+}
 export function deriveInningsState(
   events: CricketEvent[],
+  playingConditions: InningsPlayingConditions = {},
 ): InningsState {
   const state: InningsState = {
     runs: 0,
@@ -67,8 +214,25 @@ export function deriveInningsState(
     batters: {},
     bowlers: {},
     fielders: {},
+    chase: null,
+    oppositionPenaltyRuns: 0,
+    completion: {
+      completed: false,
+      reason: null,
+    },
+    break: {
+      active: false,
+      reason: null,
+      note: null,
+    },
+    playingConditions: {
+      target: playingConditions.target ?? null,
+      scheduledLegalBalls:
+        playingConditions.scheduledLegalBalls ?? null,
+    },
+        currentWicketkeeperId: null,
+        currentScorerId: null,
   };
-
   function getBatter(
     participantId: ParticipantId,
   ): BatterState {
@@ -98,8 +262,106 @@ export function deriveInningsState(
 
     return fielder;
   }
+  function updateAutomaticCompletion() {
+    const target =
+      state.playingConditions.target;
 
-  for (const event of events) {
+    if (
+      target !== null &&
+      state.runs >= target
+    ) {
+      state.completion = {
+        completed: true,
+        reason: "TARGET_REACHED",
+      };
+
+      return;
+    }
+
+    const scheduledLegalBalls =
+      state.playingConditions.scheduledLegalBalls;
+
+    if (
+      scheduledLegalBalls !== null &&
+      state.legalBalls >= scheduledLegalBalls
+    ) {
+      state.completion = {
+        completed: true,
+        reason: "BALL_LIMIT_REACHED",
+      };
+    }
+  }
+
+  for (const event of resolveEffectiveEvents(events)) {
+    if (state.completion.completed) {
+      continue;
+    }
+
+    if (event.type === "INNINGS_ENDED") {
+      state.completion = {
+        completed: true,
+        reason: event.reason,
+      };
+
+      continue;
+    }
+
+    if (event.type === "BREAK_STARTED") {
+      if (!state.break.active) {
+        state.break = {
+          active: true,
+          reason: event.reason,
+          note: event.note ?? null,
+        };
+      }
+
+      continue;
+    }
+
+    if (event.type === "BREAK_ENDED") {
+      if (state.break.active) {
+        state.break = {
+          active: false,
+          reason: null,
+          note: null,
+        };
+      }
+
+      continue;
+    }
+
+    if (state.break.active) {
+      continue;
+    }
+    if (event.type === "PLAYING_CONDITIONS_CHANGED") {
+      state.playingConditions.scheduledLegalBalls =
+        event.scheduledLegalBalls;
+
+      updateAutomaticCompletion();
+
+      continue;
+    }
+
+    if (event.type === "TARGET_REVISED") {
+      state.playingConditions.target =
+        event.target;
+
+      updateAutomaticCompletion();
+
+      continue;
+    }
+
+    if (event.type === "WICKETKEEPER_CHANGED") {
+      state.currentWicketkeeperId =
+        event.wicketkeeperId;
+
+      continue;
+    }
+    if (event.type === "SCORER_HANDOVER") {
+      state.currentScorerId = event.scorerId;
+
+      continue;
+    }
     if (event.type === "OVER_ENDED") {
       if (!state.overReadyToEnd) {
         continue;
@@ -178,6 +440,20 @@ export function deriveInningsState(
       continue;
     }
 
+        if (event.type === "PENALTY_RUNS") {
+      if (event.awardedTo === "BATTING") {
+        state.runs += event.runs;
+        state.extras.penalty += event.runs;
+        state.extras.total += event.runs;
+      } else {
+        state.oppositionPenaltyRuns += event.runs;
+      }
+      updateAutomaticCompletion();
+      continue;
+    }
+    if (!isValidDelivery(event)) {
+      continue;
+    }
     const striker = getBatter(event.strikerId);
     getBatter(event.nonStrikerId);
 
@@ -345,11 +621,45 @@ export function deriveInningsState(
     state.currentBowlerId =
       event.bowlerId;
 
-    if (
+        if (
       state.legalBallsInCurrentOver === 6
     ) {
       state.overReadyToEnd = true;
     }
+    updateAutomaticCompletion();
+
+  }
+
+  const effectiveTarget =
+    state.playingConditions.target;
+
+  if (effectiveTarget !== null) {
+    const target = effectiveTarget;
+    const firstInningsScore = target - 1;
+
+    const scheduledLegalBalls =
+      state.playingConditions.scheduledLegalBalls;
+
+    const ballsRemaining =
+      scheduledLegalBalls !== null
+        ? Math.max(
+            scheduledLegalBalls -
+              state.legalBalls,
+            0,
+          )
+        : null;
+
+    state.chase = {
+      target,
+      runsRequired: Math.max(
+        target - state.runs,
+        0,
+      ),
+      ballsRemaining,
+      targetReached: state.runs >= target,
+      scoresLevel:
+        state.runs === firstInningsScore,
+    };
   }
 
   return state;
