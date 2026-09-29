@@ -83,6 +83,70 @@ export async function setDccParticipantStatusAction(
   }
 }
 
+
+export async function addDccPlayerAction(
+  scoringSessionId: string,
+  dccPlayerId: string,
+): Promise<SetupActionResult> {
+  try {
+    if (!scoringSessionId || !dccPlayerId) {
+      return { ok: false, message: "Choose a DCC player to add." };
+    }
+
+    const auth = await requireActiveUser();
+    if (!auth.ok) return { ok: false, message: auth.message };
+
+    const { error } = await auth.supabase.rpc("add_app_scorer_dcc_player", {
+      target_scoring_session_id: scoringSessionId,
+      target_dcc_player_id: dccPlayerId,
+    });
+
+    if (error) return { ok: false, message: error.message };
+
+    revalidateSetup(scoringSessionId);
+    return { ok: true, message: "DCC player added to the match-day squad." };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
+export async function setOppositionParticipantStatusAction(
+  scoringSessionId: string,
+  matchParticipantId: string,
+  participationStatus: "AVAILABLE" | "REMOVED",
+): Promise<SetupActionResult> {
+  try {
+    if (!scoringSessionId || !matchParticipantId) {
+      return { ok: false, message: "Participant details are incomplete." };
+    }
+
+    const auth = await requireActiveUser();
+    if (!auth.ok) return { ok: false, message: auth.message };
+
+    const { error } = await auth.supabase.rpc(
+      "set_app_scorer_opposition_participant_status",
+      {
+        target_scoring_session_id: scoringSessionId,
+        target_match_participant_id: matchParticipantId,
+        target_participation_status: participationStatus,
+      },
+    );
+
+    if (error) return { ok: false, message: error.message };
+
+    revalidateSetup(scoringSessionId);
+    return {
+      ok: true,
+      message:
+        participationStatus === "REMOVED"
+          ? "Opposition player removed from the match-day squad."
+          : "Opposition player restored to the match-day squad.",
+    };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
 export async function addOppositionPlayerAction(
   scoringSessionId: string,
   displayName: string,
@@ -172,6 +236,39 @@ export async function startInningsAction(
 
     const auth = await requireActiveUser();
     if (!auth.ok) return { ok: false, message: auth.message };
+
+    const [
+      { data: sideRows, error: sideError },
+      { data: participantRows, error: participantError },
+    ] = await Promise.all([
+      auth.supabase
+        .from("match_sides")
+        .select("side_id,display_name")
+        .eq("scoring_session_id", scoringSessionId),
+      auth.supabase
+        .from("match_participants")
+        .select("side_id,participant_role,participation_status")
+        .eq("scoring_session_id", scoringSessionId),
+    ]);
+
+    if (sideError) return { ok: false, message: sideError.message };
+    if (participantError) return { ok: false, message: participantError.message };
+
+    for (const side of sideRows ?? []) {
+      const activeCount = (participantRows ?? []).filter(
+        (participant) =>
+          participant.side_id === side.side_id &&
+          participant.participant_role === "PLAYING" &&
+          participant.participation_status !== "REMOVED",
+      ).length;
+
+      if (activeCount < 8 || activeCount > 15) {
+        return {
+          ok: false,
+          message: `${side.display_name} must have between 8 and 15 match-day players before the innings can start. Current squad: ${activeCount}.`,
+        };
+      }
+    }
 
     const { data, error } = await auth.supabase.rpc(
       "start_app_scorer_innings",

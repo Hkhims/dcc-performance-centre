@@ -2689,4 +2689,56 @@ it("keeps the latest valid replacement when a later replacement is invalid", () 
   expect(state.legalBalls).toBe(1);
   expect(state.batters.himanshu.runs).toBe(2);
 });
+
+  it("rejects the same bowler starting consecutive overs", () => {
+    const firstOver: CricketEvent[] = Array.from({ length: 6 }, (_, index) => ({
+      id: `first-over-${index + 1}`,
+      type: "DELIVERY" as const,
+      strikerId: "batter-1",
+      nonStrikerId: "batter-2",
+      bowlerId: "bowler-1",
+      batRuns: 0 as const,
+    }));
+    const state = deriveInningsState([
+      ...firstOver,
+      { id: "over-1-ended", type: "OVER_ENDED" },
+      { id: "bad-next-over", type: "DELIVERY", strikerId: "batter-2", nonStrikerId: "batter-1", bowlerId: "bowler-1", batRuns: 4 },
+    ]);
+    expect(state.completedOvers).toBe(1);
+    expect(state.legalBalls).toBe(6);
+    expect(state.runs).toBe(0);
+    expect(state.currentBowlerId).toBeNull();
+    expect(state.previousOverBowlerId).toBe("bowler-1");
+  });
+
+  it("allows a different bowler to start the next over", () => {
+    const firstOver: CricketEvent[] = Array.from({ length: 6 }, (_, index) => ({
+      id: `first-over-valid-${index + 1}`,
+      type: "DELIVERY" as const,
+      strikerId: "batter-1",
+      nonStrikerId: "batter-2",
+      bowlerId: "bowler-1",
+      batRuns: 0 as const,
+    }));
+    const state = deriveInningsState([
+      ...firstOver,
+      { id: "over-1-valid-ended", type: "OVER_ENDED" },
+      { id: "good-next-over", type: "DELIVERY", strikerId: "batter-2", nonStrikerId: "batter-1", bowlerId: "bowler-2", batRuns: 1 },
+    ]);
+    expect(state.legalBalls).toBe(7);
+    expect(state.runs).toBe(1);
+    expect(state.currentBowlerId).toBe("bowler-2");
+    expect(state.previousOverBowlerId).toBe("bowler-1");
+  });
+
+  it("records unresolved catch and run-out attribution without inventing a fielder", () => {
+    const state = deriveInningsState([
+      { id: "unknown-catch", type: "DELIVERY", strikerId: "batter-1", nonStrikerId: "batter-2", bowlerId: "bowler-1", batRuns: 0, wicket: { type: "CAUGHT", dismissedBatterId: "batter-1" } },
+      { id: "unknown-run-out", type: "DELIVERY", strikerId: "batter-3", nonStrikerId: "batter-2", bowlerId: "bowler-1", batRuns: 0, wicket: { type: "RUN_OUT", dismissedBatterId: "batter-3", fielderIds: [] } },
+    ]);
+    expect(state.wickets).toBe(2);
+    expect(state.bowlers["bowler-1"].wickets).toBe(1);
+    expect(Object.keys(state.fielders)).toHaveLength(0);
+  });
+
 });

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import {
   getScorerSnapshot,
   recordDelivery,
+  recordOverEnded,
+  undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,12 +14,33 @@ type ScorerActionResult = {
   message: string;
 };
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
+type BatRuns = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-  return "Something went wrong.";
+type DeliveryExtrasInput = {
+  wides?: number;
+  noBalls?: number;
+  byes?: number;
+  legByes?: number;
+};
+
+type WicketInput =
+  | { type: "BOWLED" | "LBW" | "HIT_WICKET" | "CAUGHT_AND_BOWLED"; dismissedBatterId: string }
+  | { type: "CAUGHT"; dismissedBatterId: string; fielderId?: string }
+  | { type: "STUMPED"; dismissedBatterId: string; fielderId: string }
+  | { type: "RUN_OUT"; dismissedBatterId: string; fielderIds: string[] };
+
+type RecordScoringDeliveryInput = {
+  batRuns: BatRuns;
+  extras?: DeliveryExtrasInput;
+  completedRuns?: number;
+  wicket?: WicketInput;
+  strikerParticipantId?: string;
+  nonStrikerParticipantId?: string;
+  bowlerParticipantId?: string;
+};
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Something went wrong.";
 }
 
 async function requireSignedInUser() {
@@ -32,10 +55,170 @@ async function requireSignedInUser() {
   };
 }
 
-export async function recordBatRunsAction(
+function positiveWholeNumber(value: number | undefined) {
+  return (
+    value !== undefined &&
+    Number.isInteger(value) &&
+    value > 0
+  );
+}
+
+function validateDeliveryInput(
+  input: RecordScoringDeliveryInput,
+): string | null {
+  if (![0, 1, 2, 3, 4, 5, 6].includes(input.batRuns)) {
+    return "Invalid bat-runs value.";
+  }
+
+  if (
+    input.completedRuns !== undefined &&
+    (!Number.isInteger(input.completedRuns) ||
+      input.completedRuns < 0)
+  ) {
+    return "Completed runs must be a non-negative whole number.";
+  }
+
+  const extras = input.extras ?? {};
+  const hasWide = extras.wides !== undefined;
+  const hasNoBall = extras.noBalls !== undefined;
+  const hasByes = extras.byes !== undefined;
+  const hasLegByes = extras.legByes !== undefined;
+
+  for (const value of [
+    extras.wides,
+    extras.noBalls,
+    extras.byes,
+    extras.legByes,
+  ]) {
+    if (value !== undefined && !positiveWholeNumber(value)) {
+      return "Extras must be positive whole numbers.";
+    }
+  }
+
+  if (hasWide) {
+    if (hasNoBall || hasByes || hasLegByes) {
+      return "A wide cannot be combined with another extra type.";
+    }
+
+    if (input.batRuns !== 0) {
+      return "A wide cannot also contain bat runs.";
+    }
+  }
+
+  if (hasByes && hasLegByes) {
+    return "A delivery cannot contain both byes and leg-byes.";
+  }
+
+  if ((hasByes || hasLegByes) && input.batRuns !== 0) {
+    return "Byes and leg-byes cannot also contain bat runs.";
+  }
+
+  if (hasNoBall && extras.noBalls !== 1) {
+    return "A no-ball must contain one no-ball penalty run.";
+  }
+
+  if (
+    !hasWide &&
+    !hasNoBall &&
+    !hasByes &&
+    !hasLegByes &&
+    input.completedRuns !== undefined
+  ) {
+    return "Completed-run metadata is only needed for extras.";
+  }
+
+  if (input.wicket && !input.wicket.dismissedBatterId.trim()) {
+    return "A dismissed batter is required.";
+  }
+
+  if (
+    input.wicket &&
+    input.wicket.type === "STUMPED" &&
+    !input.wicket.fielderId.trim()
+  ) {
+    return "A fielder is required for this dismissal.";
+  }
+
+  if (
+    input.wicket?.type === "RUN_OUT" &&
+    input.wicket.fielderIds.some((fielderId) => !fielderId.trim())
+  ) {
+    return "Run-out fielder IDs must be valid.";
+  }
+
+  if (
+    input.wicket &&
+    hasWide &&
+    !["STUMPED", "RUN_OUT"].includes(input.wicket.type)
+  ) {
+    return "Only stumped or run out can be recorded from a wide.";
+  }
+
+  if (
+    input.wicket &&
+    hasNoBall &&
+    input.wicket.type !== "RUN_OUT"
+  ) {
+    return "Only run out can be recorded from a no-ball.";
+  }
+
+  return null;
+}
+
+function deliveryMessage(
+  input: RecordScoringDeliveryInput,
+) {
+  if (input.wicket) {
+    return `${input.wicket.type.replaceAll("_", " ")} wicket recorded.`;
+  }
+
+  const extras = input.extras ?? {};
+
+  if (extras.wides) {
+    return `${extras.wides} wide${
+      extras.wides === 1 ? "" : "s"
+    } recorded.`;
+  }
+
+  if (extras.noBalls && extras.byes) {
+    return `No-ball + ${extras.byes} bye${
+      extras.byes === 1 ? "" : "s"
+    } recorded.`;
+  }
+
+  if (extras.noBalls && extras.legByes) {
+    return `No-ball + ${extras.legByes} leg-bye${
+      extras.legByes === 1 ? "" : "s"
+    } recorded.`;
+  }
+
+  if (extras.noBalls) {
+    return input.batRuns === 0
+      ? "No-ball recorded."
+      : `No-ball + ${input.batRuns} off the bat recorded.`;
+  }
+
+  if (extras.byes) {
+    return `${extras.byes} bye${
+      extras.byes === 1 ? "" : "s"
+    } recorded.`;
+  }
+
+  if (extras.legByes) {
+    return `${extras.legByes} leg-bye${
+      extras.legByes === 1 ? "" : "s"
+    } recorded.`;
+  }
+
+  return `${input.batRuns} run${
+    input.batRuns === 1 ? "" : "s"
+  } recorded.`;
+}
+
+export async function recordScoringDeliveryAction(
   scoringSessionId: string,
   inningsId: string,
-  batRuns: 0 | 1 | 2 | 3 | 4 | 5 | 6,
+  input: RecordScoringDeliveryInput,
 ): Promise<ScorerActionResult> {
   try {
     if (!scoringSessionId.trim() || !inningsId.trim()) {
@@ -45,10 +228,12 @@ export async function recordBatRunsAction(
       };
     }
 
-    if (![0, 1, 2, 3, 4, 5, 6].includes(batRuns)) {
+    const validationError = validateDeliveryInput(input);
+
+    if (validationError) {
       return {
         ok: false,
-        message: "Invalid bat-runs value.",
+        message: validationError,
       };
     }
 
@@ -86,32 +271,190 @@ export async function recordBatRunsAction(
       };
     }
 
+    const strikerParticipantId =
+      input.strikerParticipantId ?? snapshot.strikerParticipantId;
+    const nonStrikerParticipantId =
+      input.nonStrikerParticipantId ?? snapshot.nonStrikerParticipantId;
+    const bowlerParticipantId =
+      input.bowlerParticipantId ?? snapshot.bowlerParticipantId;
+
+    if (!strikerParticipantId || !nonStrikerParticipantId) {
+      return {
+        ok: false,
+        message: "Choose the incoming batter before recording the next delivery.",
+      };
+    }
+
+    if (!bowlerParticipantId) {
+      return {
+        ok: false,
+        message: "Choose the next bowler before recording the next delivery.",
+      };
+    }
+
+    if (
+      snapshot.strikerParticipantId &&
+      strikerParticipantId !== snapshot.strikerParticipantId
+    ) {
+      return { ok: false, message: "The selected striker does not match the current innings state." };
+    }
+
+    if (
+      snapshot.nonStrikerParticipantId &&
+      nonStrikerParticipantId !== snapshot.nonStrikerParticipantId
+    ) {
+      return { ok: false, message: "The selected non-striker does not match the current innings state." };
+    }
+
+    if (
+      snapshot.bowlerParticipantId &&
+      bowlerParticipantId !== snapshot.bowlerParticipantId
+    ) {
+      return { ok: false, message: "The selected bowler does not match the current innings state." };
+    }
+
+    if (
+      snapshot.bowlerParticipantId === null &&
+      snapshot.previousOverBowlerParticipantId !== null &&
+      bowlerParticipantId === snapshot.previousOverBowlerParticipantId
+    ) {
+      return {
+        ok: false,
+        message: "The bowler who completed the previous over cannot bowl the next over.",
+      };
+    }
+
     await recordDelivery({
       eventId: crypto.randomUUID(),
       scoringSessionId,
       inningsId,
       sequenceKey: snapshot.nextSequenceKey,
-      strikerParticipantId:
-        snapshot.strikerParticipantId,
-      nonStrikerParticipantId:
-        snapshot.nonStrikerParticipantId,
-      bowlerParticipantId:
-        snapshot.bowlerParticipantId,
-      batRuns,
+      strikerParticipantId,
+      nonStrikerParticipantId,
+      bowlerParticipantId,
+      batRuns: input.batRuns,
+      extras: input.extras,
+      running:
+        input.completedRuns === undefined
+          ? undefined
+          : {
+              completedRuns: input.completedRuns,
+            },
+      wicket: input.wicket,
     });
 
-    revalidatePath(
-      `/portal/scorer/${scoringSessionId}`,
-    );
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
 
     return {
       ok: true,
-      message: `${batRuns} run${batRuns === 1 ? "" : "s"} recorded.`,
+      message: deliveryMessage(input),
     };
   } catch (error) {
     return {
       ok: false,
       message: errorMessage(error),
     };
+  }
+}
+
+export async function recordBatRunsAction(
+  scoringSessionId: string,
+  inningsId: string,
+  batRuns: BatRuns,
+): Promise<ScorerActionResult> {
+  return recordScoringDeliveryAction(
+    scoringSessionId,
+    inningsId,
+    { batRuns },
+  );
+}
+
+
+export async function endOverAction(
+  scoringSessionId: string,
+  inningsId: string,
+): Promise<ScorerActionResult> {
+  try {
+    const { signedIn } = await requireSignedInUser();
+    if (!signedIn) return { ok: false, message: "You must be signed in." };
+
+    const snapshot = await getScorerSnapshot(inningsId);
+    if (snapshot.scoringSessionId !== scoringSessionId) {
+      return { ok: false, message: "The innings does not belong to this scoring session." };
+    }
+    if (!snapshot.overReadyToEnd) {
+      return { ok: false, message: "The current over is not ready to end." };
+    }
+
+    await recordOverEnded({
+      eventId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+      sequenceKey: snapshot.nextSequenceKey,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+    return { ok: true, message: "Over ended. Choose the next bowler." };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
+export async function undoLastBallAction(
+  scoringSessionId: string,
+  inningsId: string,
+): Promise<ScorerActionResult> {
+  try {
+    const { signedIn } = await requireSignedInUser();
+    if (!signedIn) return { ok: false, message: "You must be signed in." };
+
+    const snapshot = await getScorerSnapshot(inningsId);
+    if (snapshot.scoringSessionId !== scoringSessionId) {
+      return { ok: false, message: "The innings does not belong to this scoring session." };
+    }
+
+    await undoLastBall({
+      correctionGroupId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+    return { ok: true, message: "Last ball undone." };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
+
+export async function addLiveOppositionPlayerAction(
+  scoringSessionId: string,
+  displayName: string,
+): Promise<ScorerActionResult> {
+  try {
+    const normalisedName = displayName.trim();
+    if (!normalisedName) {
+      return { ok: false, message: "Enter the opposition player's name." };
+    }
+
+    const { signedIn } = await requireSignedInUser();
+    if (!signedIn) return { ok: false, message: "You must be signed in." };
+
+    const supabase = await createClient();
+
+    const { error } = await supabase.rpc(
+      "add_app_scorer_opposition_player",
+      {
+        target_scoring_session_id: scoringSessionId,
+        target_display_name: normalisedName,
+      },
+    );
+
+    if (error) return { ok: false, message: error.message };
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+    return { ok: true, message: `${normalisedName} added to the opposition squad.` };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
   }
 }

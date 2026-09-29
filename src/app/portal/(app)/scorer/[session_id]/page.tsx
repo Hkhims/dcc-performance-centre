@@ -5,30 +5,28 @@ import { createClient } from "@/lib/supabase/server";
 import ScorerControls from "./ScorerControls";
 
 type PageProps = {
-  params: Promise<{
-    session_id: string;
-  }>;
+  params: Promise<{ session_id: string }>;
 };
 
 type InningsLookupRow = {
   innings_id: string;
+  batting_side_id: string;
+  bowling_side_id: string;
 };
 
 type ParticipantRow = {
   match_participant_id: string;
+  side_id: string;
   display_name: string;
+  participant_role: string;
+  participation_status: string;
 };
 
-function formatOvers(
-  completedOvers: number,
-  legalBallsInCurrentOver: number,
-) {
+function formatOvers(completedOvers: number, legalBallsInCurrentOver: number) {
   return `${completedOvers}.${legalBallsInCurrentOver}`;
 }
 
-export default async function ScorerPage({
-  params,
-}: PageProps) {
+export default async function ScorerPage({ params }: PageProps) {
   const { session_id: scoringSessionId } = await params;
   const supabase = await createClient();
 
@@ -43,13 +41,10 @@ export default async function ScorerPage({
     await supabase.rpc("get_my_portal_access");
 
   if (accessError) {
-    throw new Error(
-      `Unable to load Portal access: ${accessError.message}`,
-    );
+    throw new Error(`Unable to load Portal access: ${accessError.message}`);
   }
 
   const access = accessData?.[0] ?? null;
-
   if (!access || access.account_status !== "Active") {
     redirect("/portal");
   }
@@ -57,7 +52,7 @@ export default async function ScorerPage({
   const { data: inningsData, error: inningsError } =
     await supabase
       .from("scoring_innings")
-      .select("innings_id")
+      .select("innings_id,batting_side_id,bowling_side_id")
       .eq("scoring_session_id", scoringSessionId)
       .eq("status", "InProgress")
       .order("innings_number", { ascending: false })
@@ -65,34 +60,42 @@ export default async function ScorerPage({
       .maybeSingle();
 
   if (inningsError) {
-    throw new Error(
-      `Unable to load active innings: ${inningsError.message}`,
-    );
+    throw new Error(`Unable to load active innings: ${inningsError.message}`);
   }
 
   const innings = inningsData as InningsLookupRow | null;
-
   if (!innings) {
+    throw new Error("This scoring session does not have an innings in progress.");
+  }
+
+  const snapshot = await getScorerSnapshot(innings.innings_id);
+
+  const { data: externalSideData, error: externalSideError } =
+    await supabase
+      .from("match_sides")
+      .select("side_id")
+      .eq("scoring_session_id", scoringSessionId)
+      .eq("side_type", "EXTERNAL")
+      .maybeSingle();
+
+  if (externalSideError) {
     throw new Error(
-      "This scoring session does not have an innings in progress.",
+      `Unable to load opposition side: ${externalSideError.message}`,
     );
   }
 
-  const snapshot = await getScorerSnapshot(
-    innings.innings_id,
-  );
-
-  const participantIds = [
-    snapshot.strikerParticipantId,
-    snapshot.nonStrikerParticipantId,
-    snapshot.bowlerParticipantId,
-  ];
+  const externalSideId =
+    typeof externalSideData?.side_id === "string"
+      ? externalSideData.side_id
+      : null;
 
   const { data: participantData, error: participantError } =
     await supabase
       .from("match_participants")
-      .select("match_participant_id,display_name")
-      .in("match_participant_id", participantIds);
+      .select(
+        "match_participant_id,side_id,display_name,participant_role,participation_status",
+      )
+      .eq("scoring_session_id", scoringSessionId);
 
   if (participantError) {
     throw new Error(
@@ -100,14 +103,47 @@ export default async function ScorerPage({
     );
   }
 
-  const participants =
-    (participantData ?? []) as ParticipantRow[];
+  const participants = (participantData ?? []) as ParticipantRow[];
+  const playingParticipants = participants.filter(
+    (participant) =>
+      participant.participant_role === "PLAYING" &&
+      participant.participation_status !== "REMOVED",
+  );
 
-  const participantName = (participantId: string) =>
-    participants.find(
+  const dismissedBatterIds = new Set(
+    Object.values(snapshot.state.batters)
+      .filter((batter) => batter.dismissed)
+      .map((batter) => batter.participantId),
+  );
+
+  const battingParticipants = playingParticipants
+    .filter(
       (participant) =>
-        participant.match_participant_id === participantId,
-    )?.display_name ?? "Unknown player";
+        participant.side_id === innings.batting_side_id &&
+        !dismissedBatterIds.has(participant.match_participant_id),
+    )
+    .map((participant) => ({
+      participantId: participant.match_participant_id,
+      displayName: participant.display_name,
+    }));
+
+  const bowlingParticipants = playingParticipants
+    .filter((participant) => participant.side_id === innings.bowling_side_id)
+    .map((participant) => ({
+      participantId: participant.match_participant_id,
+      displayName: participant.display_name,
+    }));
+
+  const participantName = (participantId: string | null) => {
+    if (!participantId) return "Selection required";
+
+    return (
+      participants.find(
+        (participant) =>
+          participant.match_participant_id === participantId,
+      )?.display_name ?? "Unknown player"
+    );
+  };
 
   return (
     <main className="min-h-screen bg-[#05070d] px-4 py-8 text-white sm:px-6 sm:py-12">
@@ -154,29 +190,21 @@ export default async function ScorerPage({
                 <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3">
                   <span className="text-zinc-500">Striker · </span>
                   <span className="font-semibold text-amber-300">
-                    {participantName(
-                      snapshot.strikerParticipantId,
-                    )}
+                    {participantName(snapshot.strikerParticipantId)}
                   </span>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3">
-                  <span className="text-zinc-500">
-                    Non-striker ·{" "}
-                  </span>
+                  <span className="text-zinc-500">Non-striker · </span>
                   <span className="font-semibold">
-                    {participantName(
-                      snapshot.nonStrikerParticipantId,
-                    )}
+                    {participantName(snapshot.nonStrikerParticipantId)}
                   </span>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3">
                   <span className="text-zinc-500">Bowler · </span>
                   <span className="font-semibold">
-                    {participantName(
-                      snapshot.bowlerParticipantId,
-                    )}
+                    {participantName(snapshot.bowlerParticipantId)}
                   </span>
                 </div>
               </div>
@@ -185,19 +213,32 @@ export default async function ScorerPage({
             <ScorerControls
               scoringSessionId={scoringSessionId}
               inningsId={snapshot.inningsId}
+              strikerParticipantId={snapshot.strikerParticipantId}
+              nonStrikerParticipantId={snapshot.nonStrikerParticipantId}
+              bowlerParticipantId={snapshot.bowlerParticipantId}
+              previousOverBowlerParticipantId={
+                snapshot.previousOverBowlerParticipantId
+              }
+              battingParticipants={battingParticipants}
+              bowlingParticipants={bowlingParticipants}
+              canAddBattingOppositionPlayer={
+                externalSideId === innings.batting_side_id
+              }
+              canAddBowlingOppositionPlayer={
+                externalSideId === innings.bowling_side_id
+              }
+              overReadyToEnd={snapshot.overReadyToEnd}
+              canUndo={snapshot.eventCount > 0}
             />
           </div>
 
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-600">
-            <span>
-              Delivery events: {snapshot.eventCount}
-            </span>
-            <span>
-              Next sequence: {snapshot.nextSequenceKey}
-            </span>
-            <span>
-              Legal balls: {snapshot.legalBalls}
-            </span>
+            <span>Ledger events: {snapshot.eventCount}</span>
+            <span>Next sequence: {snapshot.nextSequenceKey}</span>
+            <span>Legal balls: {snapshot.legalBalls}</span>
+            {snapshot.overReadyToEnd ? (
+              <span className="text-sky-400">Over ready to end</span>
+            ) : null}
           </div>
         </section>
       </div>

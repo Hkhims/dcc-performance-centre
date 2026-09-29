@@ -53,9 +53,10 @@ export type ScorerSnapshot = {
   completedOvers: number;
   legalBallsInCurrentOver: number;
   overReadyToEnd: boolean;
-  strikerParticipantId: string;
-  nonStrikerParticipantId: string;
-  bowlerParticipantId: string;
+  strikerParticipantId: string | null;
+  nonStrikerParticipantId: string | null;
+  bowlerParticipantId: string | null;
+  previousOverBowlerParticipantId: string | null;
   nextSequenceKey: number;
   eventCount: number;
   state: InningsState;
@@ -232,22 +233,12 @@ function currentParticipants(
   rows: PersistedScoringEventRow[],
   state: InningsState,
 ): {
-  strikerParticipantId: string;
-  nonStrikerParticipantId: string;
-  bowlerParticipantId: string;
+  strikerParticipantId: string | null;
+  nonStrikerParticipantId: string | null;
+  bowlerParticipantId: string | null;
 } {
   if (rows.length === 0) {
     return requireOpeningConfiguration(innings);
-  }
-
-  if (
-    state.strikerId === null ||
-    state.nonStrikerId === null ||
-    state.currentBowlerId === null
-  ) {
-    throw new Error(
-      "Persisted innings state does not identify the current striker, non-striker and bowler.",
-    );
   }
 
   return {
@@ -328,6 +319,8 @@ export async function getScorerSnapshot(
       participants.nonStrikerParticipantId,
     bowlerParticipantId:
       participants.bowlerParticipantId,
+    previousOverBowlerParticipantId:
+      state.previousOverBowlerId,
     nextSequenceKey: nextSequenceKey(rows),
     eventCount: rows.length,
     state,
@@ -383,5 +376,74 @@ export async function recordDelivery(
   return {
     eventId: data,
     state,
+  };
+}
+
+
+export async function recordOverEnded(input: {
+  eventId: string;
+  scoringSessionId: string;
+  inningsId: string;
+  sequenceKey: number;
+}): Promise<RecordDeliveryResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "record_app_scorer_over_ended",
+    {
+      target_event_id: input.eventId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_sequence_key: input.sequenceKey,
+      target_occurred_at: new Date().toISOString(),
+      target_client_created_at: null,
+      target_device_id: null,
+    },
+  );
+
+  if (error) {
+    throw new Error(`Unable to end over: ${error.message}`);
+  }
+
+  if (typeof data !== "string") {
+    throw new Error("Over persistence returned an invalid event ID.");
+  }
+
+  return {
+    eventId: data,
+    state: await derivePersistedInningsState(input.inningsId),
+  };
+}
+
+export async function undoLastBall(input: {
+  correctionGroupId: string;
+  scoringSessionId: string;
+  inningsId: string;
+}): Promise<RecordDeliveryResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "undo_app_scorer_last_ball",
+    {
+      target_correction_group_id: input.correctionGroupId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_occurred_at: new Date().toISOString(),
+      target_client_created_at: null,
+      target_device_id: null,
+    },
+  );
+
+  if (error) {
+    throw new Error(`Unable to undo last ball: ${error.message}`);
+  }
+
+  if (typeof data !== "string") {
+    throw new Error("Undo persistence returned an invalid event ID.");
+  }
+
+  return {
+    eventId: data,
+    state: await derivePersistedInningsState(input.inningsId),
   };
 }

@@ -21,6 +21,11 @@ type MatchSideRow = {
   display_name: string;
 };
 
+type DccPlayerRow = {
+  player_id: string;
+  player_name: string;
+};
+
 type MatchParticipantRow = {
   match_participant_id: string;
   side_id: string;
@@ -73,6 +78,7 @@ export default async function MatchSetupPage({ params }: PageProps) {
   const [
     { data: sideData, error: sideError },
     { data: participantData, error: participantError },
+    { data: dccPlayerData, error: dccPlayerError },
   ] = await Promise.all([
     supabase
       .from("match_sides")
@@ -86,13 +92,22 @@ export default async function MatchSetupPage({ params }: PageProps) {
       )
       .eq("scoring_session_id", scoringSessionId)
       .order("display_name"),
+    supabase
+      .from("players")
+      .select("player_id,player_name")
+      .eq("active", true)
+      .order("player_name"),
   ]);
 
   if (sideError) throw new Error(`Unable to load match sides: ${sideError.message}`);
   if (participantError) {
     throw new Error(`Unable to load match participants: ${participantError.message}`);
   }
+  if (dccPlayerError) {
+    throw new Error(`Unable to load DCC players: ${dccPlayerError.message}`);
+  }
 
+  const dccPlayers = (dccPlayerData ?? []) as DccPlayerRow[];
   const sides = (sideData ?? []) as MatchSideRow[];
   const participants = (participantData ?? []) as MatchParticipantRow[];
 
@@ -152,6 +167,10 @@ export default async function MatchSetupPage({ params }: PageProps) {
               sideId: side.side_id,
               displayName: side.display_name,
               sideType: side.side_type,
+            }))}
+            dccPlayers={dccPlayers.map((player) => ({
+              playerId: player.player_id,
+              playerName: player.player_name,
             }))}
             participants={participants.map((participant) => ({
               participantId: participant.match_participant_id,

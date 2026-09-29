@@ -203,6 +203,7 @@ export function deriveInningsState(
     strikerId: null,
     nonStrikerId: null,
     currentBowlerId: null,
+    previousOverBowlerId: null,
     extras: {
       wides: 0,
       noBalls: 0,
@@ -375,6 +376,7 @@ export function deriveInningsState(
       state.completedOvers += 1;
       state.legalBallsInCurrentOver = 0;
       state.overReadyToEnd = false;
+      state.previousOverBowlerId = state.currentBowlerId;
       state.currentBowlerId = null;
 
       continue;
@@ -454,6 +456,16 @@ export function deriveInningsState(
     if (!isValidDelivery(event)) {
       continue;
     }
+
+    if (
+      state.legalBallsInCurrentOver === 0 &&
+      state.completedOvers > 0 &&
+      state.previousOverBowlerId !== null &&
+      event.bowlerId === state.previousOverBowlerId
+    ) {
+      continue;
+    }
+
     const striker = getBatter(event.strikerId);
     getBatter(event.nonStrikerId);
 
@@ -532,11 +544,13 @@ export function deriveInningsState(
 
       switch (event.wicket.type) {
         case "CAUGHT": {
-          const fielder = getFielder(
-            event.wicket.fielderId,
-          );
+          if (event.wicket.fielderId) {
+            const fielder = getFielder(
+              event.wicket.fielderId,
+            );
 
-          fielder.catches += 1;
+            fielder.catches += 1;
+          }
           break;
         }
 

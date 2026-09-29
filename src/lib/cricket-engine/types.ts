@@ -25,7 +25,11 @@ export type BowlerOnlyWicket = {
 export type CaughtWicket = {
   type: "CAUGHT";
   dismissedBatterId: ParticipantId;
-  fielderId: ParticipantId;
+  /**
+   * Omitted when the catch is known but the scorer cannot identify the fielder.
+   * The wicket remains valid; no player receives a catch until corrected.
+   */
+  fielderId?: ParticipantId;
 };
 
 export type StumpedWicket = {
@@ -42,6 +46,10 @@ export type CaughtAndBowledWicket = {
 export type RunOutWicket = {
   type: "RUN_OUT";
   dismissedBatterId: ParticipantId;
+  /**
+   * Empty when the run-out is known but the scorer cannot identify a fielder.
+   * This deliberately records unresolved attribution rather than inventing a player.
+   */
   fielderIds: ParticipantId[];
 };
 
@@ -250,6 +258,7 @@ export type InningsState = {
   strikerId: ParticipantId | null;
   nonStrikerId: ParticipantId | null;
   currentBowlerId: ParticipantId | null;
+  previousOverBowlerId: ParticipantId | null;
   extras: ExtrasState;
   batters: Record<ParticipantId, BatterState>;
   bowlers: Record<ParticipantId, BowlerState>;
