@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AvailabilityControls from "../../teams/[team_id]/AvailabilityControls";
+import StartMatchControls from "./StartMatchControls";
 
 type PortalAccess = {
   account_role: "User" | "Super Admin";
@@ -557,6 +558,32 @@ export default async function FixtureManagementPage({
                 {teamSelectionButton}
               </Link>
             </article>
+          </div>
+        </section>
+
+        <section className="pb-8">
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.045] p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-400">
+              Match Day
+            </p>
+            <h2 className="mt-2 text-2xl font-bold">
+              DCC App Scorer
+            </h2>
+            <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-300">
+              Start the match-day scoring session for this fixture.
+              The published team remains the pre-match selection;
+              match-day participation is managed separately inside
+              the App Scorer.
+            </p>
+            <StartMatchControls
+              matchId={match.match_id}
+              eligible={
+                match.status === "Scheduled" &&
+                isPublished &&
+                (match.stats_category === "Friendly" ||
+                  match.stats_category === "Warm-up")
+              }
+            />
           </div>
         </section>
 
