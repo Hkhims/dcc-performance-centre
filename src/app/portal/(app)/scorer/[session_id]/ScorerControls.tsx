@@ -1,19 +1,24 @@
 "use client";
-
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   addLiveOppositionPlayerAction,
   endOverAction,
   recordScoringDeliveryAction,
+  saveDeliveryEnrichmentAction,
   undoLastBallAction,
 } from "./actions";
-
+import type {
+  ContactType,
+  DeliveryLength,
+  DeliveryLine,
+  ShotIntent,
+  ShotType,
+} from "@/lib/app-scorer/delivery-enrichment";
 type ParticipantOption = {
   participantId: string;
   displayName: string;
 };
-
 type ScorerControlsProps = {
   scoringSessionId: string;
   inningsId: string;
@@ -28,7 +33,6 @@ type ScorerControlsProps = {
   overReadyToEnd: boolean;
   canUndo: boolean;
 };
-
 type ExtraPanel =
   | "WIDE"
   | "NO_BALL"
@@ -36,13 +40,10 @@ type ExtraPanel =
   | "LEG_BYE"
   | "WICKET"
   | null;
-
 type NoBallMode = "BAT" | "BYE" | "LEG_BYE";
-
 const RUN_BUTTONS = [0, 1, 2, 3, 4, 6] as const;
 const NO_BALL_BAT_RUNS = [0, 1, 2, 3, 4, 6] as const;
 const RUNNING_EXTRAS = [1, 2, 3, 4] as const;
-
 export default function ScorerControls({
   scoringSessionId,
   inningsId,
@@ -67,6 +68,15 @@ export default function ScorerControls({
     useState<NoBallMode>("BAT");
   const [pendingLabel, setPendingLabel] =
     useState<string | null>(null);
+  const [latestDeliveryEventId, setLatestDeliveryEventId] =
+    useState<string | null>(null);
+  const [showDeliveryDetails, setShowDeliveryDetails] = useState(false);
+  const [deliveryLine, setDeliveryLine] = useState<DeliveryLine | "">("");
+  const [deliveryLength, setDeliveryLength] = useState<DeliveryLength | "">("");
+  const [shotType, setShotType] = useState<ShotType | "">("");
+  const [shotIntent, setShotIntent] = useState<ShotIntent | "">("");
+  const [contactType, setContactType] = useState<ContactType | "">("");
+  const [scorerNote, setScorerNote] = useState("");
   const [incomingBatterId, setIncomingBatterId] = useState("");
   const [confirmedIncomingBatterId, setConfirmedIncomingBatterId] =
     useState<string | null>(null);
@@ -88,7 +98,6 @@ export default function ScorerControls({
     "BAT" | "BYE" | "LEG_BYE"
   >("BAT");
   const [wicketRuns, setWicketRuns] = useState(0);
-
   function record(
     label: string,
     input: Parameters<
@@ -97,7 +106,6 @@ export default function ScorerControls({
   ) {
     setMessage(null);
     setPendingLabel(label);
-
     startTransition(async () => {
       const result =
         await recordScoringDeliveryAction(
@@ -119,14 +127,59 @@ export default function ScorerControls({
               bowlerParticipantId ?? confirmedNextBowlerId ?? undefined,
           },
         );
+      setMessage(result.message);
+      setMessageIsError(!result.ok);
+      setPendingLabel(null);
+      if (result.ok) {
+        setLatestDeliveryEventId(result.deliveryEventId ?? null);
+        setShowDeliveryDetails(false);
+        resetDeliveryDetails();
+        setExtraPanel(null);
+        setNoBallMode("BAT");
+        router.refresh();
+      }
+    });
+  }
+  function resetDeliveryDetails() {
+    setDeliveryLine("");
+    setDeliveryLength("");
+    setShotType("");
+    setShotIntent("");
+    setContactType("");
+    setScorerNote("");
+  }
+
+  function saveLatestDeliveryDetails() {
+    if (!latestDeliveryEventId) {
+      setMessage("There is no delivery available to add details to.");
+      setMessageIsError(true);
+      return;
+    }
+
+    setMessage(null);
+    setPendingLabel("SAVE_DETAILS");
+
+    startTransition(async () => {
+      const result = await saveDeliveryEnrichmentAction(
+        scoringSessionId,
+        inningsId,
+        latestDeliveryEventId,
+        {
+          deliveryLine: deliveryLine || undefined,
+          deliveryLength: deliveryLength || undefined,
+          shotType: shotType || undefined,
+          shotIntent: shotIntent || undefined,
+          contactType: contactType || undefined,
+          scorerNote: scorerNote || undefined,
+        },
+      );
 
       setMessage(result.message);
       setMessageIsError(!result.ok);
       setPendingLabel(null);
 
       if (result.ok) {
-        setExtraPanel(null);
-        setNoBallMode("BAT");
+        setShowDeliveryDetails(false);
         router.refresh();
       }
     });
@@ -137,12 +190,10 @@ export default function ScorerControls({
     setExtraPanel((current) =>
       current === panel ? null : panel,
     );
-
     if (panel === "NO_BALL") {
       setNoBallMode("BAT");
     }
   }
-
   function runServerAction(
     label: string,
     action: () => Promise<{ ok: boolean; message: string }>,
@@ -157,7 +208,6 @@ export default function ScorerControls({
       if (result.ok) router.refresh();
     });
   }
-
   function addLiveOppositionPlayer() {
     const name = liveOppositionName.trim();
     if (!name) {
@@ -165,29 +215,24 @@ export default function ScorerControls({
       setMessageIsError(true);
       return;
     }
-
     runServerAction("ADD_OPPOSITION", () =>
       addLiveOppositionPlayerAction(scoringSessionId, name),
     );
     setLiveOppositionName("");
   }
-
   function recordWicket() {
     if (!dismissedBatterId) {
       setMessage("Choose the dismissed batter.");
       setMessageIsError(true);
       return;
     }
-
     const unknownFielder = fielderId === "__UNKNOWN__";
     const needsKnownFielder = wicketType === "STUMPED";
-
     if (needsKnownFielder && (!fielderId || unknownFielder)) {
       setMessage("Choose the wicketkeeper for a stumping.");
       setMessageIsError(true);
       return;
     }
-
     if (
       (wicketType === "CAUGHT" || wicketType === "RUN_OUT") &&
       !fielderId
@@ -196,7 +241,6 @@ export default function ScorerControls({
       setMessageIsError(true);
       return;
     }
-
     if (
       wicketDeliveryKind === "WIDE" &&
       wicketType !== "STUMPED" &&
@@ -206,7 +250,6 @@ export default function ScorerControls({
       setMessageIsError(true);
       return;
     }
-
     if (
       wicketDeliveryKind === "NO_BALL" &&
       wicketType !== "RUN_OUT"
@@ -215,19 +258,16 @@ export default function ScorerControls({
       setMessageIsError(true);
       return;
     }
-
     if (wicketType !== "RUN_OUT" && wicketRuns !== 0) {
       setMessage("Runs with a wicket are currently supported for run-outs only.");
       setMessageIsError(true);
       return;
     }
-
     let wicket:
       | { type: "BOWLED" | "LBW" | "HIT_WICKET" | "CAUGHT_AND_BOWLED"; dismissedBatterId: string }
       | { type: "CAUGHT"; dismissedBatterId: string; fielderId?: string }
       | { type: "STUMPED"; dismissedBatterId: string; fielderId: string }
       | { type: "RUN_OUT"; dismissedBatterId: string; fielderIds: string[] };
-
     if (wicketType === "CAUGHT") {
       wicket = unknownFielder
         ? { type: "CAUGHT", dismissedBatterId }
@@ -243,7 +283,6 @@ export default function ScorerControls({
     } else {
       wicket = { type: wicketType, dismissedBatterId };
     }
-
     if (wicketDeliveryKind === "WIDE") {
       record("WICKET_WIDE", {
         batRuns: 0,
@@ -253,7 +292,6 @@ export default function ScorerControls({
       });
       return;
     }
-
     if (wicketDeliveryKind === "NO_BALL") {
       const extras =
         wicketRunKind === "BYE"
@@ -261,7 +299,6 @@ export default function ScorerControls({
           : wicketRunKind === "LEG_BYE"
             ? { noBalls: 1, ...(wicketRuns > 0 ? { legByes: wicketRuns } : {}) }
             : { noBalls: 1 };
-
       record("WICKET_NO_BALL", {
         batRuns: wicketRunKind === "BAT" ? wicketRuns as 0 | 1 | 2 | 3 | 4 : 0,
         extras,
@@ -270,14 +307,12 @@ export default function ScorerControls({
       });
       return;
     }
-
     const extras =
       wicketRunKind === "BYE" && wicketRuns > 0
         ? { byes: wicketRuns }
         : wicketRunKind === "LEG_BYE" && wicketRuns > 0
           ? { legByes: wicketRuns }
           : undefined;
-
     record("WICKET_LEGAL", {
       batRuns: wicketRunKind === "BAT" ? wicketRuns as 0 | 1 | 2 | 3 | 4 : 0,
       extras,
@@ -285,7 +320,6 @@ export default function ScorerControls({
       wicket,
     });
   }
-
   const missingBatter =
     strikerParticipantId === null || nonStrikerParticipantId === null;
   const missingBowler = bowlerParticipantId === null;
@@ -295,13 +329,11 @@ export default function ScorerControls({
     (participant) =>
       participant.participantId !== excludedBatterId,
   );
-
   return (
     <div className="mt-8">
       {missingBatter ? (
         <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-4">
           <p className="font-semibold text-amber-300">Incoming batter required</p>
-
           {confirmedIncomingBatterId ? (
             <div className="mt-3">
               <div className="rounded-xl border border-amber-400/20 bg-black/20 px-4 py-3">
@@ -315,7 +347,6 @@ export default function ScorerControls({
                   )?.displayName ?? "Selected batsman"}
                 </p>
               </div>
-
               <button
                 type="button"
                 disabled={isPending}
@@ -345,7 +376,6 @@ export default function ScorerControls({
                   </option>
                 ))}
               </select>
-
               {incomingBatterId ? (
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <button
@@ -360,7 +390,6 @@ export default function ScorerControls({
                   >
                     Confirm batsman
                   </button>
-
                   <button
                     type="button"
                     disabled={isPending}
@@ -374,7 +403,6 @@ export default function ScorerControls({
                   </button>
                 </div>
               ) : null}
-
               {canAddBattingOppositionPlayer ? (
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
@@ -402,11 +430,9 @@ export default function ScorerControls({
           )}
         </div>
       ) : null}
-
       {missingBowler ? (
         <div className="mb-5 rounded-2xl border border-sky-400/30 bg-sky-400/[0.06] p-4">
           <p className="font-semibold text-sky-300">Next bowler required</p>
-
           {confirmedNextBowlerId ? (
             <div className="mt-3">
               <div className="rounded-xl border border-sky-400/20 bg-black/20 px-4 py-3">
@@ -420,7 +446,6 @@ export default function ScorerControls({
                   )?.displayName ?? "Selected bowler"}
                 </p>
               </div>
-
               <button
                 type="button"
                 disabled={isPending}
@@ -447,7 +472,6 @@ export default function ScorerControls({
                 {bowlingParticipants.map((participant) => {
                   const bowledPreviousOver =
                     participant.participantId === previousOverBowlerParticipantId;
-
                   return (
                     <option
                       key={participant.participantId}
@@ -460,7 +484,6 @@ export default function ScorerControls({
                   );
                 })}
               </select>
-
               {nextBowlerId ? (
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <button
@@ -475,7 +498,6 @@ export default function ScorerControls({
                   >
                     Confirm bowler
                   </button>
-
                   <button
                     type="button"
                     disabled={isPending}
@@ -489,7 +511,6 @@ export default function ScorerControls({
                   </button>
                 </div>
               ) : null}
-
               {canAddBowlingOppositionPlayer ? (
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
@@ -517,21 +538,111 @@ export default function ScorerControls({
           )}
         </div>
       ) : null}
+      {latestDeliveryEventId ? (
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => setShowDeliveryDetails((current) => !current)}
+          className="mb-5 w-full rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm font-bold text-amber-300 disabled:opacity-50"
+        >
+          {showDeliveryDetails
+            ? "Close delivery details"
+            : "Add details to last ball"}
+        </button>
+      ) : null}
+
+      {latestDeliveryEventId && showDeliveryDetails ? (
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="font-semibold text-white">Delivery details</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            Optional — scoring can continue without these details.
+          </p>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Line</label>
+          <select value={deliveryLine} onChange={(event) => setDeliveryLine(event.target.value as DeliveryLine | "")} className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white">
+            <option value="">Not recorded</option>
+            <option value="WIDE_OUTSIDE_OFF">Wide outside off</option>
+            <option value="OUTSIDE_OFF">Outside off</option>
+            <option value="OFF_STUMP">Off stump</option>
+            <option value="MIDDLE_STUMP">Middle stump</option>
+            <option value="LEG_STUMP">Leg stump</option>
+            <option value="OUTSIDE_LEG">Outside leg</option>
+          </select>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Length</label>
+          <select value={deliveryLength} onChange={(event) => setDeliveryLength(event.target.value as DeliveryLength | "")} className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white">
+            <option value="">Not recorded</option>
+            <option value="YORKER">Yorker</option>
+            <option value="FULL">Full</option>
+            <option value="GOOD_LENGTH">Good length</option>
+            <option value="BACK_OF_LENGTH">Back of a length</option>
+            <option value="SHORT">Short</option>
+            <option value="FULL_TOSS">Full toss</option>
+          </select>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Shot</label>
+          <select value={shotType} onChange={(event) => setShotType(event.target.value as ShotType | "")} className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white">
+            <option value="">Not recorded</option>
+            <option value="NO_SHOT">No shot</option>
+            <option value="LEAVE">Leave</option>
+            <option value="DEFENCE">Defence</option>
+            <option value="DRIVE">Drive</option>
+            <option value="PUNCH">Punch</option>
+            <option value="CUT">Cut</option>
+            <option value="PULL">Pull</option>
+            <option value="HOOK">Hook</option>
+            <option value="FLICK_CLIP">Flick / clip</option>
+            <option value="GLANCE">Glance</option>
+            <option value="SWEEP">Sweep</option>
+            <option value="REVERSE_SWEEP">Reverse sweep</option>
+            <option value="SLOG">Slog</option>
+            <option value="SLOG_SWEEP">Slog sweep</option>
+            <option value="RAMP_SCOOP">Ramp / scoop</option>
+            <option value="OTHER">Other</option>
+          </select>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Intent</label>
+          <select value={shotIntent} onChange={(event) => setShotIntent(event.target.value as ShotIntent | "")} className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white">
+            <option value="">Not recorded</option>
+            <option value="GROUNDED">Grounded</option>
+            <option value="LOFTED">Lofted</option>
+          </select>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Contact</label>
+          <select value={contactType} onChange={(event) => setContactType(event.target.value as ContactType | "")} className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white">
+            <option value="">Not recorded</option>
+            <option value="CLEAN">Clean</option>
+            <option value="EDGED">Edged</option>
+            <option value="INSIDE_EDGE">Inside edge</option>
+            <option value="MISTIMED">Mistimed</option>
+            <option value="BEATEN">Beaten</option>
+            <option value="TOP_EDGE">Top edge</option>
+          </select>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Scorer note</label>
+          <textarea value={scorerNote} onChange={(event) => setScorerNote(event.target.value)} maxLength={250} rows={3} placeholder="Optional note about this delivery" className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm text-white" />
+
+          <button type="button" disabled={isPending} onClick={saveLatestDeliveryDetails} className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-black text-black transition hover:bg-amber-300 disabled:opacity-50">
+            {isPending && pendingLabel === "SAVE_DETAILS" ? "Saving details…" : "Save delivery details"}
+          </button>
+        </div>
+      ) : null}
 
       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
         Runs off the bat
       </p>
-
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
         {RUN_BUTTONS.map((runs) => {
           const label = `BAT_${runs}`;
-
           return (
             <button
               key={runs}
               type="button"
               onClick={() =>
-                record(label, { batRuns: runs })
+                record(label, {
+                  batRuns: runs,
+                  boundary: runs === 4 ? "FOUR" : runs === 6 ? "SIX" : undefined,
+                })
               }
               disabled={
                 isPending ||
@@ -548,11 +659,9 @@ export default function ScorerControls({
           );
         })}
       </div>
-
       <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
         Extras
       </p>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <ExtraButton
           label="Wide"
@@ -591,7 +700,6 @@ export default function ScorerControls({
           onClick={() => togglePanel("LEG_BYE")}
         />
       </div>
-
       {extraPanel === "WIDE" ? (
         <SelectionPanel
           title="Wide"
@@ -608,10 +716,8 @@ export default function ScorerControls({
               })
             }
           />
-
           {[1, 2, 3, 4].map((completedRuns) => {
             const totalWides = completedRuns + 1;
-
             return (
               <ChoiceButton
                 key={completedRuns}
@@ -632,7 +738,6 @@ export default function ScorerControls({
               />
             );
           })}
-
           <ChoiceButton
             label="5 wides · boundary"
             disabled={isPending}
@@ -646,7 +751,6 @@ export default function ScorerControls({
           />
         </SelectionPanel>
       ) : null}
-
       {extraPanel === "NO_BALL" ? (
         <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-4">
           <p className="font-semibold text-white">No Ball</p>
@@ -655,7 +759,6 @@ export default function ScorerControls({
             whether the additional runs came off the bat, as byes,
             or as leg-byes.
           </p>
-
           <div className="mt-4 grid grid-cols-3 gap-2">
             <ModeButton
               label="Off Bat"
@@ -676,7 +779,6 @@ export default function ScorerControls({
               onClick={() => setNoBallMode("LEG_BYE")}
             />
           </div>
-
           {noBallMode === "BAT" ? (
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {NO_BALL_BAT_RUNS.map((batRuns) => (
@@ -698,7 +800,6 @@ export default function ScorerControls({
               ))}
             </div>
           ) : null}
-
           {noBallMode === "BYE" ? (
             <NoBallRunningExtras
               kind="BYE"
@@ -707,7 +808,6 @@ export default function ScorerControls({
               record={record}
             />
           ) : null}
-
           {noBallMode === "LEG_BYE" ? (
             <NoBallRunningExtras
               kind="LEG_BYE"
@@ -718,7 +818,6 @@ export default function ScorerControls({
           ) : null}
         </div>
       ) : null}
-
       {extraPanel === "BYE" ? (
         <RunningExtraPanel
           title="Bye"
@@ -727,7 +826,6 @@ export default function ScorerControls({
           record={record}
         />
       ) : null}
-
       {extraPanel === "LEG_BYE" ? (
         <RunningExtraPanel
           title="Leg Bye"
@@ -736,11 +834,9 @@ export default function ScorerControls({
           record={record}
         />
       ) : null}
-
       <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
         Wicket & corrections
       </p>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
           type="button"
@@ -753,7 +849,6 @@ export default function ScorerControls({
         >
           WICKET
         </button>
-
         <button
           type="button"
           disabled={isPending || !overReadyToEnd}
@@ -766,28 +861,36 @@ export default function ScorerControls({
         >
           {pendingLabel === "END_OVER" ? "…" : "End Over"}
         </button>
-
         <button
           type="button"
           disabled={isPending || !canUndo}
           onClick={() =>
-            runServerAction("UNDO", () =>
-              undoLastBallAction(scoringSessionId, inningsId),
-            )
+            runServerAction("UNDO", async () => {
+              const result = await undoLastBallAction(
+                scoringSessionId,
+                inningsId,
+              );
+
+              if (result.ok) {
+                setLatestDeliveryEventId(null);
+                setShowDeliveryDetails(false);
+                resetDeliveryDetails();
+              }
+
+              return result;
+            })
           }
           className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-zinc-200 disabled:opacity-40"
         >
           {pendingLabel === "UNDO" ? "…" : "Undo Last Ball"}
         </button>
       </div>
-
       {extraPanel === "WICKET" ? (
         <div className="mt-3 rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-4">
           <p className="font-semibold text-white">Record wicket</p>
           <p className="mt-1 text-xs leading-5 text-zinc-500">
             Record the complete delivery outcome. Cricket-invalid combinations are blocked before persistence and validated again by the engine.
           </p>
-
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <select
               value={wicketType}
@@ -811,7 +914,6 @@ export default function ScorerControls({
               <option value="RUN_OUT">Run Out</option>
               <option value="HIT_WICKET">Hit Wicket</option>
             </select>
-
             <select
               value={dismissedBatterId}
               onChange={(event) => setDismissedBatterId(event.target.value)}
@@ -826,7 +928,6 @@ export default function ScorerControls({
                   </option>
                 ))}
             </select>
-
             {(wicketType === "CAUGHT" ||
               wicketType === "STUMPED" ||
               wicketType === "RUN_OUT") ? (
@@ -849,7 +950,6 @@ export default function ScorerControls({
               </select>
             ) : null}
           </div>
-
           {(wicketType === "STUMPED" || wicketType === "RUN_OUT") ? (
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
@@ -883,7 +983,6 @@ export default function ScorerControls({
               </div>
             </div>
           ) : null}
-
           {wicketType === "RUN_OUT" ? (
             <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
               {wicketDeliveryKind !== "WIDE" ? (
@@ -898,7 +997,6 @@ export default function ScorerControls({
                   </div>
                 </>
               ) : null}
-
               <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
                 Runs completed before wicket
               </p>
@@ -919,7 +1017,6 @@ export default function ScorerControls({
                   </button>
                 ))}
               </div>
-
               {wicketDeliveryKind === "WIDE" ? (
                 <p className="mt-2 text-xs text-zinc-500">
                   Team wides: {wicketRuns + 1} (one wide penalty + {wicketRuns} completed).
@@ -927,13 +1024,11 @@ export default function ScorerControls({
               ) : null}
             </div>
           ) : null}
-
           {wicketType === "STUMPED" && wicketDeliveryKind === "WIDE" ? (
             <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
               Stumped from a wide records one wide, no legal ball, and a bowler wicket.
             </p>
           ) : null}
-
           <button
             type="button"
             onClick={recordWicket}
@@ -944,7 +1039,6 @@ export default function ScorerControls({
           </button>
         </div>
       ) : null}
-
       {message ? (
         <p
           className={`mt-4 text-sm ${
@@ -959,7 +1053,6 @@ export default function ScorerControls({
     </div>
   );
 }
-
 function ExtraButton({
   label,
   active,
@@ -986,7 +1079,6 @@ function ExtraButton({
     </button>
   );
 }
-
 function ModeButton({
   label,
   active,
@@ -1013,7 +1105,6 @@ function ModeButton({
     </button>
   );
 }
-
 function SelectionPanel({
   title,
   description,
@@ -1035,7 +1126,6 @@ function SelectionPanel({
     </div>
   );
 }
-
 function ChoiceButton({
   label,
   disabled,
@@ -1056,7 +1146,6 @@ function ChoiceButton({
     </button>
   );
 }
-
 function RunningExtraPanel({
   title,
   kind,
@@ -1075,7 +1164,6 @@ function RunningExtraPanel({
 }) {
   const extrasKey =
     kind === "BYE" ? "byes" : "legByes";
-
   return (
     <SelectionPanel
       title={title}
@@ -1097,7 +1185,6 @@ function RunningExtraPanel({
           }
         />
       ))}
-
       <ChoiceButton
         label={`4 ${title.toLowerCase()}s · boundary`}
         disabled={disabled}
@@ -1112,7 +1199,6 @@ function RunningExtraPanel({
     </SelectionPanel>
   );
 }
-
 function NoBallRunningExtras({
   kind,
   title,
@@ -1131,7 +1217,6 @@ function NoBallRunningExtras({
 }) {
   const extrasKey =
     kind === "BYE" ? "byes" : "legByes";
-
   return (
     <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
       {RUNNING_EXTRAS.map((runs) => (
@@ -1153,7 +1238,6 @@ function NoBallRunningExtras({
           }
         />
       ))}
-
       <ChoiceButton
         label={`NB + 4 ${title.toLowerCase()}s · boundary`}
         disabled={disabled}

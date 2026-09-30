@@ -7,11 +7,15 @@ import {
   recordOverEnded,
   undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
+import { saveDeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment-service";
+import type { DeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment";
+import type { DeliveryBoundary } from "@/lib/cricket-engine/types";
 import { createClient } from "@/lib/supabase/server";
 
 type ScorerActionResult = {
   ok: boolean;
   message: string;
+  deliveryEventId?: string;
 };
 
 type BatRuns = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -31,6 +35,7 @@ type WicketInput =
 
 type RecordScoringDeliveryInput = {
   batRuns: BatRuns;
+  boundary?: DeliveryBoundary;
   extras?: DeliveryExtrasInput;
   completedRuns?: number;
   wicket?: WicketInput;
@@ -324,8 +329,10 @@ export async function recordScoringDeliveryAction(
       };
     }
 
+    const deliveryEventId = crypto.randomUUID();
+
     await recordDelivery({
-      eventId: crypto.randomUUID(),
+      eventId: deliveryEventId,
       scoringSessionId,
       inningsId,
       sequenceKey: snapshot.nextSequenceKey,
@@ -333,6 +340,7 @@ export async function recordScoringDeliveryAction(
       nonStrikerParticipantId,
       bowlerParticipantId,
       batRuns: input.batRuns,
+      boundary: input.boundary,
       extras: input.extras,
       running:
         input.completedRuns === undefined
@@ -348,6 +356,7 @@ export async function recordScoringDeliveryAction(
     return {
       ok: true,
       message: deliveryMessage(input),
+      deliveryEventId,
     };
   } catch (error) {
     return {
@@ -357,6 +366,54 @@ export async function recordScoringDeliveryAction(
   }
 }
 
+export async function saveDeliveryEnrichmentAction(
+  scoringSessionId: string,
+  inningsId: string,
+  deliveryEventId: string,
+  enrichment: DeliveryEnrichment,
+): Promise<ScorerActionResult> {
+  try {
+    if (
+      !scoringSessionId.trim() ||
+      !inningsId.trim() ||
+      !deliveryEventId.trim()
+    ) {
+      return {
+        ok: false,
+        message:
+          "Scoring session, innings and delivery are required.",
+      };
+    }
+
+    const { signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    await saveDeliveryEnrichment({
+      deliveryEventId,
+      scoringSessionId,
+      inningsId,
+      enrichment,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Delivery details saved.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
 export async function recordBatRunsAction(
   scoringSessionId: string,
   inningsId: string,
