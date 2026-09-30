@@ -51,6 +51,14 @@ type MatchSelection = {
   status: "Draft" | "Published";
 };
 
+type ScoringSession = {
+  scoring_session_id: string;
+};
+
+type ActiveScoringInnings = {
+  innings_id: string;
+};
+
 type FixtureManagementPageProps = {
   params: Promise<{
     match_id: string;
@@ -169,6 +177,48 @@ export default async function FixtureManagementPage({
   }
 
   const teamId = manageableEntry.team_id;
+
+  const { data: scoringSessionData, error: scoringSessionError } =
+    await supabase
+      .from("scoring_sessions")
+      .select("scoring_session_id")
+      .eq("match_id", matchId)
+      .maybeSingle();
+
+  if (scoringSessionError) {
+    throw new Error(
+      `Unable to load scoring session: ${scoringSessionError.message}`,
+    );
+  }
+
+  const scoringSession =
+    scoringSessionData as ScoringSession | null;
+
+  let activeScoringInnings: ActiveScoringInnings | null = null;
+
+  if (scoringSession) {
+    const { data: inningsData, error: inningsError } =
+      await supabase
+        .from("scoring_innings")
+        .select("innings_id")
+        .eq(
+          "scoring_session_id",
+          scoringSession.scoring_session_id,
+        )
+        .eq("status", "InProgress")
+        .order("innings_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (inningsError) {
+      throw new Error(
+        `Unable to load active scoring innings: ${inningsError.message}`,
+      );
+    }
+
+    activeScoringInnings =
+      inningsData as ActiveScoringInnings | null;
+  }
 
   const [
     { data: teamData, error: teamError },
@@ -566,15 +616,18 @@ export default async function FixtureManagementPage({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-400">
               Match Day
             </p>
+
             <h2 className="mt-2 text-2xl font-bold">
               DCC App Scorer
             </h2>
+
             <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-300">
-              Start the match-day scoring session for this fixture.
-              The published team remains the pre-match selection;
-              match-day participation is managed separately inside
-              the App Scorer.
+              Start or continue the match-day scoring session for
+              this fixture. The published team remains the
+              pre-match selection; match-day participation is
+              managed separately inside the App Scorer.
             </p>
+
             <StartMatchControls
               matchId={match.match_id}
               eligible={
@@ -583,6 +636,10 @@ export default async function FixtureManagementPage({
                 (match.stats_category === "Friendly" ||
                   match.stats_category === "Warm-up")
               }
+              existingSessionId={
+                scoringSession?.scoring_session_id ?? null
+              }
+              hasActiveInnings={Boolean(activeScoringInnings)}
             />
           </div>
         </section>
