@@ -516,6 +516,85 @@ it.each([
     expect(state.nonStrikerId).toBe("venky");
   },
 );
+
+it("recommends ending the innings at 10 wickets without automatically completing it", () => {
+  const events: CricketEvent[] = Array.from(
+    { length: 10 },
+    (_, index): CricketEvent => ({
+      id: `wicket-${index + 1}`,
+      type: "DELIVERY",
+      strikerId: `batter-${index + 1}`,
+      nonStrikerId: "surviving-batter",
+      bowlerId: "bowler-1",
+      batRuns: 0,
+      wicket: {
+        type: "BOWLED",
+        dismissedBatterId: `batter-${index + 1}`,
+      },
+    }),
+  );
+
+  const state = deriveInningsState(events);
+
+  expect(state.wickets).toBe(10);
+
+  expect(state.completion).toEqual({
+    completed: false,
+    reason: null,
+  });
+
+  expect(state.endRecommendation).toEqual({
+    recommended: true,
+    reason: "ALL_OUT",
+  });
+});
+
+it("rejects an entire delivery that would create an 11th wicket", () => {
+  const firstTenWickets: CricketEvent[] = Array.from(
+    { length: 10 },
+    (_, index): CricketEvent => ({
+      id: `wicket-${index + 1}`,
+      type: "DELIVERY",
+      strikerId: `batter-${index + 1}`,
+      nonStrikerId: "surviving-batter",
+      bowlerId: "bowler-1",
+      batRuns: 0,
+      wicket: {
+        type: "BOWLED",
+        dismissedBatterId: `batter-${index + 1}`,
+      },
+    }),
+  );
+
+  const events: CricketEvent[] = [
+    ...firstTenWickets,
+    {
+      id: "illegal-eleventh-wicket",
+      type: "DELIVERY",
+      strikerId: "batter-11",
+      nonStrikerId: "surviving-batter",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+      wicket: {
+        type: "BOWLED",
+        dismissedBatterId: "batter-11",
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.wickets).toBe(10);
+  expect(state.runs).toBe(0);
+  expect(state.legalBalls).toBe(10);
+
+  expect(state.batters["batter-11"]).toBeUndefined();
+
+  expect(state.bowlers["bowler-1"].wickets).toBe(10);
+  expect(state.bowlers["bowler-1"].legalBalls).toBe(10);
+  expect(state.bowlers["bowler-1"].runsConceded).toBe(0);
+});
+
   it("records a run-out as a team wicket without crediting the bowler", () => {
     const events: CricketEvent[] = [
       {
@@ -1470,7 +1549,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
     expect(state.bowlers["bowler-1"].runsConceded).toBe(4);
   });
 
-  it("allows batting-side penalty runs to complete a chase", () => {
+  it("does not automatically complete a chase when batting-side penalty runs reach the target", () => {
     const events: CricketEvent[] = [
       {
         id: "chase-four",
@@ -1502,11 +1581,11 @@ it("preserves strike when two runs are completed but one is called short", () =>
       scoresLevel: false,
     });
         expect(state.completion).toEqual({
-      completed: true,
-      reason: "TARGET_REACHED",
+      completed: false,
+      reason: null,
     });
   });
-    it("marks a chase as complete when the target is reached", () => {
+    it("does not automatically complete a chase when the target is reached", () => {
     const events: CricketEvent[] = [
       {
         id: "winning-boundary",
@@ -1524,12 +1603,17 @@ it("preserves strike when two runs are completed but one is called short", () =>
     });
 
     expect(state.completion).toEqual({
-      completed: true,
+      completed: false,
+      reason: null,
+    });
+
+    expect(state.endRecommendation).toEqual({
+      recommended: true,
       reason: "TARGET_REACHED",
     });
   });
 
-  it("marks an innings as complete when its scheduled legal balls are exhausted", () => {
+  it("does not automatically complete an innings when its scheduled legal balls are exhausted", () => {
     const events: CricketEvent[] = Array.from(
       { length: 6 },
       (_, index): CricketEvent => ({
@@ -1548,7 +1632,12 @@ it("preserves strike when two runs are completed but one is called short", () =>
 
     expect(state.legalBalls).toBe(6);
     expect(state.completion).toEqual({
-      completed: true,
+      completed: false,
+      reason: null,
+    });
+
+    expect(state.endRecommendation).toEqual({
+      recommended: true,
       reason: "BALL_LIMIT_REACHED",
     });
   });
@@ -1578,6 +1667,71 @@ it("preserves strike when two runs are completed but one is called short", () =>
       reason: "MANUAL",
     });
   });
+
+  it("allows the scorer to confirm an innings ended all out", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "confirmed-all-out",
+      type: "INNINGS_ENDED",
+      reason: "ALL_OUT",
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.completion).toEqual({
+    completed: true,
+    reason: "ALL_OUT",
+  });
+});
+
+it("allows the scorer to confirm an innings ended after reaching the target", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "winning-boundary",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 4,
+    },
+    {
+      id: "confirmed-target-reached",
+      type: "INNINGS_ENDED",
+      reason: "TARGET_REACHED",
+    },
+  ];
+
+  const state = deriveInningsState(events, {
+    target: 4,
+    scheduledLegalBalls: 12,
+  });
+
+  expect(state.runs).toBe(4);
+  expect(state.completion).toEqual({
+    completed: true,
+    reason: "TARGET_REACHED",
+  });
+});
+
+  it("allows the scorer to confirm an innings ended at the ball limit", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "confirmed-ball-limit",
+      type: "INNINGS_ENDED",
+      reason: "BALL_LIMIT_REACHED",
+    },
+  ];
+
+  const state = deriveInningsState(events, {
+    scheduledLegalBalls: 6,
+  });
+
+  expect(state.completion).toEqual({
+    completed: true,
+    reason: "BALL_LIMIT_REACHED",
+  });
+});
 
   it("ignores later scoring events after an explicit innings end", () => {
     const events: CricketEvent[] = [
@@ -1824,7 +1978,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
     });
   });
 
-  it("completes the chase immediately when a revised target is already reached", () => {
+  it("does not automatically complete the chase when a revised target is already reached", () => {
     const events: CricketEvent[] = [
       {
         id: "opening-six",
@@ -1851,12 +2005,12 @@ it("preserves strike when two runs are completed but one is called short", () =>
     expect(state.chase?.targetReached).toBe(true);
 
     expect(state.completion).toEqual({
-      completed: true,
-      reason: "TARGET_REACHED",
+      completed: false,
+      reason: null,
     });
   });
 
-  it("completes the innings when a reduced ball limit has already been reached", () => {
+  it("does not automatically complete the innings when a reduced ball limit has already been reached", () => {
     const events: CricketEvent[] = [
       {
         id: "ball-1",
@@ -1888,8 +2042,8 @@ it("preserves strike when two runs are completed but one is called short", () =>
     expect(state.playingConditions.scheduledLegalBalls).toBe(2);
 
     expect(state.completion).toEqual({
-      completed: true,
-      reason: "BALL_LIMIT_REACHED",
+      completed: false,
+      reason: null,
     });
   });
     it("tracks the current wicketkeeper without changing the score", () => {

@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   DeliveryBoundary,
+  InningsEndedReason,
   InningsState,
 } from "@/lib/cricket-engine/types";
 import {
@@ -412,6 +413,47 @@ export async function recordOverEnded(input: {
 
   if (typeof data !== "string") {
     throw new Error("Over persistence returned an invalid event ID.");
+  }
+
+  return {
+    eventId: data,
+    state: await derivePersistedInningsState(input.inningsId),
+  };
+}
+
+export async function recordInningsEnded(input: {
+  eventId: string;
+  scoringSessionId: string;
+  inningsId: string;
+  sequenceKey: number;
+  reason: InningsEndedReason;
+}): Promise<RecordDeliveryResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "record_app_scorer_innings_ended",
+    {
+      target_event_id: input.eventId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_sequence_key: input.sequenceKey,
+      target_reason: input.reason,
+      target_occurred_at: new Date().toISOString(),
+      target_client_created_at: null,
+      target_device_id: null,
+    },
+  );
+
+  if (error) {
+    throw new Error(
+      `Unable to end innings: ${error.message}`,
+    );
+  }
+
+  if (typeof data !== "string") {
+    throw new Error(
+      "Innings completion persistence returned an invalid event ID.",
+    );
   }
 
   return {

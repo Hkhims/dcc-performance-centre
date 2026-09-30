@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   getScorerSnapshot,
   recordDelivery,
+  recordInningsEnded,
   recordOverEnded,
   undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
@@ -454,6 +455,69 @@ export async function endOverAction(
     return { ok: true, message: "Over ended. Choose the next bowler." };
   } catch (error) {
     return { ok: false, message: errorMessage(error) };
+  }
+}
+
+export async function endInningsAction(
+  scoringSessionId: string,
+  inningsId: string,
+): Promise<ScorerActionResult> {
+  try {
+    const { signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const snapshot = await getScorerSnapshot(inningsId);
+
+    if (snapshot.scoringSessionId !== scoringSessionId) {
+      return {
+        ok: false,
+        message:
+          "The innings does not belong to this scoring session.",
+      };
+    }
+
+    if (snapshot.inningsStatus !== "InProgress") {
+      return {
+        ok: false,
+        message: "This innings is not currently in progress.",
+      };
+    }
+
+    const recommendation = snapshot.state.endRecommendation;
+
+    if (!recommendation.recommended || !recommendation.reason) {
+      return {
+        ok: false,
+        message:
+          "The innings does not currently have a recommended end condition.",
+      };
+    }
+
+    await recordInningsEnded({
+      eventId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+      sequenceKey: snapshot.nextSequenceKey,
+      reason: recommendation.reason,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Innings ended.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
   }
 }
 

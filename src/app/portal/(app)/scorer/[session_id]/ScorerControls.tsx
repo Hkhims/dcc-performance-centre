@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   addLiveOppositionPlayerAction,
   endOverAction,
+  endInningsAction,
   recordScoringDeliveryAction,
   saveDeliveryEnrichmentAction,
   undoLastBallAction,
@@ -31,6 +32,14 @@ type ScorerControlsProps = {
   canAddBattingOppositionPlayer: boolean;
   canAddBowlingOppositionPlayer: boolean;
   overReadyToEnd: boolean;
+  endRecommendation: {
+    recommended: boolean;
+    reason:
+      | "TARGET_REACHED"
+      | "BALL_LIMIT_REACHED"
+      | "ALL_OUT"
+      | null;
+  };
   canUndo: boolean;
 };
 type ExtraPanel =
@@ -56,6 +65,7 @@ export default function ScorerControls({
   canAddBattingOppositionPlayer,
   canAddBowlingOppositionPlayer,
   overReadyToEnd,
+  endRecommendation,
   canUndo,
 }: ScorerControlsProps) {
   const router = useRouter();
@@ -834,6 +844,42 @@ export default function ScorerControls({
           record={record}
         />
       ) : null}
+
+      {endRecommendation.recommended && endRecommendation.reason ? (
+  <div className="mt-7 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-4">
+    <p className="font-semibold text-emerald-300">
+      Innings ready to end
+    </p>
+
+    <p className="mt-1 text-sm text-zinc-400">
+      {endRecommendation.reason === "ALL_OUT"
+        ? "10 wickets have fallen."
+        : endRecommendation.reason === "TARGET_REACHED"
+          ? "The target has been reached."
+          : "The scheduled ball limit has been reached."}
+    </p>
+
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() => {
+        const confirmed = window.confirm(
+          "End this innings? You will not be able to continue scoring this innings after confirmation.",
+        );
+
+        if (!confirmed) return;
+
+        runServerAction("END_INNINGS", () =>
+          endInningsAction(scoringSessionId, inningsId),
+        );
+      }}
+      className="mt-4 w-full rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-black disabled:opacity-50"
+    >
+      {pendingLabel === "END_INNINGS" ? "Ending innings…" : "End Innings"}
+    </button>
+  </div>
+) : null}
+
       <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
         Wicket & corrections
       </p>

@@ -115,8 +115,8 @@ export type InningsEndedReason =
 export type InningsEndedEvent = {
   id: string;
   type: "INNINGS_ENDED";
-  reason: "DECLARED" | "MANUAL";
-};
+  reason: InningsEndedReason;
+  };
 
 export type BreakReason =
   | "RAIN"
@@ -210,6 +210,16 @@ export type InningsCompletionState = {
   reason: InningsEndedReason | null;
 };
 
+export type InningsEndRecommendationReason =
+  | "TARGET_REACHED"
+  | "BALL_LIMIT_REACHED"
+  | "ALL_OUT";
+
+export type InningsEndRecommendationState = {
+  recommended: boolean;
+  reason: InningsEndRecommendationReason | null;
+};
+
 export type BatterState = {
   participantId: ParticipantId;
   runs: number;
@@ -274,6 +284,7 @@ export type InningsState = {
   chase: ChaseState | null;
   oppositionPenaltyRuns: number;
   completion: InningsCompletionState;
+  endRecommendation: InningsEndRecommendationState;
   break: BreakState;
   playingConditions: EffectivePlayingConditions;
   currentWicketkeeperId: ParticipantId | null;

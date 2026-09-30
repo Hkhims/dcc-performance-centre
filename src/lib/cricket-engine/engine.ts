@@ -221,6 +221,10 @@ export function deriveInningsState(
       completed: false,
       reason: null,
     },
+    endRecommendation: {
+      recommended: false,
+      reason: null,
+    },
     break: {
       active: false,
       reason: null,
@@ -263,19 +267,22 @@ export function deriveInningsState(
 
     return fielder;
   }
-  function updateAutomaticCompletion() {
-    const target =
-      state.playingConditions.target;
+  function updateEndRecommendation() {
+    if (state.wickets >= 10) {
+      state.endRecommendation = {
+        recommended: true,
+        reason: "ALL_OUT",
+      };
+      return;
+    }
 
-    if (
-      target !== null &&
-      state.runs >= target
-    ) {
-      state.completion = {
-        completed: true,
+    const target = state.playingConditions.target;
+
+    if (target !== null && state.runs >= target) {
+      state.endRecommendation = {
+        recommended: true,
         reason: "TARGET_REACHED",
       };
-
       return;
     }
 
@@ -286,11 +293,17 @@ export function deriveInningsState(
       scheduledLegalBalls !== null &&
       state.legalBalls >= scheduledLegalBalls
     ) {
-      state.completion = {
-        completed: true,
+      state.endRecommendation = {
+        recommended: true,
         reason: "BALL_LIMIT_REACHED",
       };
+      return;
     }
+
+    state.endRecommendation = {
+      recommended: false,
+      reason: null,
+    };
   }
 
   for (const event of resolveEffectiveEvents(events)) {
@@ -338,7 +351,7 @@ export function deriveInningsState(
       state.playingConditions.scheduledLegalBalls =
         event.scheduledLegalBalls;
 
-      updateAutomaticCompletion();
+      updateEndRecommendation();
 
       continue;
     }
@@ -347,7 +360,7 @@ export function deriveInningsState(
       state.playingConditions.target =
         event.target;
 
-      updateAutomaticCompletion();
+      updateEndRecommendation();
 
       continue;
     }
@@ -450,10 +463,14 @@ export function deriveInningsState(
       } else {
         state.oppositionPenaltyRuns += event.runs;
       }
-      updateAutomaticCompletion();
+      updateEndRecommendation();
       continue;
     }
     if (!isValidDelivery(event)) {
+      continue;
+    }
+
+    if (event.wicket && state.wickets >= 10) {
       continue;
     }
 
@@ -652,7 +669,7 @@ export function deriveInningsState(
     ) {
       state.overReadyToEnd = true;
     }
-    updateAutomaticCompletion();
+    updateEndRecommendation();
 
   }
 

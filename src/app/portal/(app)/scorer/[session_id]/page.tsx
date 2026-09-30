@@ -228,6 +228,7 @@ export default async function ScorerPage({ params }: PageProps) {
                 externalSideId === innings.bowling_side_id
               }
               overReadyToEnd={snapshot.overReadyToEnd}
+              endRecommendation={snapshot.state.endRecommendation}
               canUndo={snapshot.eventCount > 0}
             />
           </div>
