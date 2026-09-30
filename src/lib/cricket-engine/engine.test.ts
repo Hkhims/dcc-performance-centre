@@ -2873,4 +2873,118 @@ it("keeps the latest valid replacement when a later replacement is invalid", () 
     expect(state.nonStrikerId).toBeNull();
   });
 });
+describe("canonical physical running with extras", () => {
+  it("uses physical crossings rather than official short-run score to determine ends", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "short-run-parity",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 1,
+        boundary: "NONE",
+        running: {
+          completedRuns: 2,
+          shortRuns: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(1);
+    expect(state.batters.himanshu.runs).toBe(1);
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBe("venky");
+  });
+
+  it("scores a no-ball plus byes while using physical crossings for the ends", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "no-ball-byes",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+          byes: 2,
+        },
+        running: {
+          completedRuns: 2,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(3);
+    expect(state.extras.noBalls).toBe(1);
+    expect(state.extras.byes).toBe(2);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBe("venky");
+  });
+
+  it("scores a no-ball plus leg-byes while using physical crossings for the ends", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "no-ball-leg-byes",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        extras: {
+          noBalls: 1,
+          legByes: 1,
+        },
+        running: {
+          completedRuns: 1,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(2);
+    expect(state.extras.noBalls).toBe(1);
+    expect(state.extras.legByes).toBe(1);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(1);
+    expect(state.legalBalls).toBe(0);
+    expect(state.strikerId).toBe("venky");
+    expect(state.nonStrikerId).toBe("himanshu");
+  });
+
+  it("does not treat four leg-byes as a batter boundary when boundary is explicit", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "leg-bye-boundary",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        boundary: "FOUR",
+        extras: {
+          legByes: 4,
+        },
+        running: {
+          completedRuns: 0,
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.extras.legByes).toBe(4);
+    expect(state.batters.himanshu.runs).toBe(0);
+    expect(state.batters.himanshu.fours).toBe(0);
+    expect(state.bowlers["bowler-1"].runsConceded).toBe(0);
+  });
+});
 });

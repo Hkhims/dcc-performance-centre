@@ -601,15 +601,15 @@ export function deriveInningsState(
     }
 
     const isCaughtDismissal =
-  event.wicket?.type === "CAUGHT" ||
-  event.wicket?.type === "CAUGHT_AND_BOWLED";
+      event.wicket?.type === "CAUGHT" ||
+      event.wicket?.type === "CAUGHT_AND_BOWLED";
 
-const physicalRuns = isCaughtDismissal
-  ? 0
-  : event.running?.completedRuns ?? event.batRuns;
+    const physicalRuns = isCaughtDismissal
+      ? 0
+      : event.running?.completedRuns ?? event.batRuns;
 
-const battersChangeEnds =
-  physicalRuns % 2 === 1;
+    const battersChangeEnds =
+      physicalRuns % 2 === 1;
 
     let strikerAfterDelivery:
       | ParticipantId
