@@ -512,11 +512,19 @@ export function deriveInningsState(
 
     striker.runs += event.batRuns;
 
-    if (event.batRuns === 4) {
+    const boundary =
+      event.boundary ??
+      (event.batRuns === 4
+        ? "FOUR"
+        : event.batRuns === 6
+          ? "SIX"
+          : "NONE");
+
+    if (boundary === "FOUR" && event.batRuns === 4) {
       striker.fours += 1;
     }
 
-    if (event.batRuns === 6) {
+    if (boundary === "SIX" && event.batRuns === 6) {
       striker.sixes += 1;
     }
 
@@ -592,12 +600,16 @@ export function deriveInningsState(
       }
     }
 
-    const physicalRuns =
-      event.running?.completedRuns ??
-      event.batRuns;
+    const isCaughtDismissal =
+  event.wicket?.type === "CAUGHT" ||
+  event.wicket?.type === "CAUGHT_AND_BOWLED";
 
-    const battersChangeEnds =
-      physicalRuns % 2 === 1;
+const physicalRuns = isCaughtDismissal
+  ? 0
+  : event.running?.completedRuns ?? event.batRuns;
+
+const battersChangeEnds =
+  physicalRuns % 2 === 1;
 
     let strikerAfterDelivery:
       | ParticipantId

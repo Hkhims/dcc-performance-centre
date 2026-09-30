@@ -2740,5 +2740,137 @@ it("keeps the latest valid replacement when a later replacement is invalid", () 
     expect(state.bowlers["bowler-1"].wickets).toBe(1);
     expect(Object.keys(state.fielders)).toHaveLength(0);
   });
+  describe("canonical delivery boundary and caught-end semantics", () => {
+  it("does not credit a boundary four when four runs are physically completed", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "run-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+        boundary: "NONE",
+        running: { completedRuns: 4 },
+      },
+    ];
 
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.batters.himanshu.runs).toBe(4);
+    expect(state.batters.himanshu.fours).toBe(0);
+    expect(state.strikerId).toBe("himanshu");
+    expect(state.nonStrikerId).toBe("venky");
+  });
+
+  it("credits an explicit boundary four to the batter", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "boundary-four",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 4,
+        boundary: "FOUR",
+        running: { completedRuns: 0 },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(4);
+    expect(state.batters.himanshu.runs).toBe(4);
+    expect(state.batters.himanshu.fours).toBe(1);
+  });
+
+  it("does not credit a six when six runs are physically completed", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "run-six",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 6,
+        boundary: "NONE",
+        running: { completedRuns: 6 },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.runs).toBe(6);
+    expect(state.batters.himanshu.runs).toBe(6);
+    expect(state.batters.himanshu.sixes).toBe(0);
+  });
+
+  it("ignores pre-catch crossing when placing the surviving batter", () => {
+    const events: CricketEvent[] = [
+      {
+        id: "caught-after-crossing",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        running: { completedRuns: 1 },
+        wicket: {
+          type: "CAUGHT",
+          dismissedBatterId: "himanshu",
+          fielderId: "fielder-1",
+        },
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.wickets).toBe(1);
+    expect(state.strikerId).toBeNull();
+    expect(state.nonStrikerId).toBe("venky");
+  });
+
+  it("puts the surviving non-striker on strike after a sixth-ball catch and End Over", () => {
+    const firstFive: CricketEvent[] = Array.from(
+      { length: 5 },
+      (_, index) => ({
+        id: `dot-${index + 1}`,
+        type: "DELIVERY" as const,
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0 as const,
+      }),
+    );
+
+    const events: CricketEvent[] = [
+      ...firstFive,
+      {
+        id: "sixth-ball-catch",
+        type: "DELIVERY",
+        strikerId: "himanshu",
+        nonStrikerId: "venky",
+        bowlerId: "bowler-1",
+        batRuns: 0,
+        running: { completedRuns: 1 },
+        wicket: {
+          type: "CAUGHT",
+          dismissedBatterId: "himanshu",
+          fielderId: "fielder-1",
+        },
+      },
+      {
+        id: "over-ended-after-catch",
+        type: "OVER_ENDED",
+      },
+    ];
+
+    const state = deriveInningsState(events);
+
+    expect(state.completedOvers).toBe(1);
+    expect(state.strikerId).toBe("venky");
+    expect(state.nonStrikerId).toBeNull();
+  });
+});
 });

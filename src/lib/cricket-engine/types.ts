@@ -12,6 +12,8 @@ export type DeliveryRunning = {
   shortRuns?: number;
 };
 
+export type DeliveryBoundary = "NONE" | "FOUR" | "SIX";
+
 export type BowlerOnlyWicketType =
   | "BOWLED"
   | "LBW"
@@ -67,6 +69,12 @@ export type DeliveryEvent = {
   nonStrikerId: ParticipantId;
   bowlerId: ParticipantId;
   batRuns: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+ * Explicit physical boundary outcome. Omitted legacy events retain the
+ * historical inference that 4 bat runs means FOUR and 6 bat runs means SIX.
+ * New events can use NONE to distinguish physically-run fours/sixes.
+ */
+boundary?: DeliveryBoundary;
   extras?: DeliveryExtras;
   running?: DeliveryRunning;
   wicket?: DeliveryWicket;
