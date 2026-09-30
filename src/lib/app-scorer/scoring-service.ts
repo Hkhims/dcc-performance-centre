@@ -1,6 +1,9 @@
 import "server-only";
 
-import type { InningsState } from "@/lib/cricket-engine/types";
+import type {
+  DeliveryBoundary,
+  InningsState,
+} from "@/lib/cricket-engine/types";
 import {
   derivePersistedEventRowsState,
   isPersistedScoringEventRow,
@@ -30,6 +33,7 @@ export type RecordDeliveryInput = {
   nonStrikerParticipantId: string;
   bowlerParticipantId: string;
   batRuns: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  boundary?: DeliveryBoundary;
   extras?: JsonObject;
   running?: JsonObject;
   wicket?: JsonObject;
@@ -347,6 +351,7 @@ export async function recordDelivery(
       target_bowler_participant_id:
         input.bowlerParticipantId,
       target_bat_runs: input.batRuns,
+      target_boundary: input.boundary ?? null,
       target_extras: input.extras ?? null,
       target_running: input.running ?? null,
       target_wicket: input.wicket ?? null,
