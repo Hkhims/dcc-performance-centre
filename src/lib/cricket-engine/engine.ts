@@ -92,6 +92,12 @@ function isValidDelivery(event: DeliveryEvent): boolean {
     return false;
   }
   if (
+  event.wicket.type !== "RUN_OUT" &&
+  event.wicket.dismissedBatterId !== event.strikerId
+) {
+  return false;
+}
+  if (
     isWide &&
     (
       event.wicket.type === "BOWLED" ||
@@ -119,7 +125,7 @@ function isValidDelivery(event: DeliveryEvent): boolean {
 
   return true;
 }
-function resolveEffectiveEvents(
+export function resolveEffectiveEvents(
   events: CricketEvent[],
 ): CricketActionEvent[] {
   const actionEvents = new Map<string, CricketActionEvent>();
@@ -642,21 +648,34 @@ export function deriveInningsState(
         ? event.strikerId
         : event.nonStrikerId;
 
-    if (event.wicket) {
-      if (
-        event.wicket.dismissedBatterId ===
-        strikerAfterDelivery
-      ) {
-        strikerAfterDelivery = null;
-      }
+    if (event.wicket?.type === "RUN_OUT") {
+  const survivingBatterId =
+    event.wicket.dismissedBatterId === event.strikerId
+      ? event.nonStrikerId
+      : event.strikerId;
 
-      if (
-        event.wicket.dismissedBatterId ===
-        nonStrikerAfterDelivery
-      ) {
-        nonStrikerAfterDelivery = null;
-      }
-    }
+  if (event.wicket.runOutEnd === "STRIKER_END") {
+    strikerAfterDelivery = null;
+    nonStrikerAfterDelivery = survivingBatterId;
+  } else {
+    strikerAfterDelivery = survivingBatterId;
+    nonStrikerAfterDelivery = null;
+  }
+} else if (event.wicket) {
+  if (
+    event.wicket.dismissedBatterId ===
+    strikerAfterDelivery
+  ) {
+    strikerAfterDelivery = null;
+  }
+
+  if (
+    event.wicket.dismissedBatterId ===
+    nonStrikerAfterDelivery
+  ) {
+    nonStrikerAfterDelivery = null;
+  }
+}
 
     state.strikerId = strikerAfterDelivery;
     state.nonStrikerId =

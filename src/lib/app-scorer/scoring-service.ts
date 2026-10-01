@@ -7,6 +7,7 @@ import type {
 } from "@/lib/cricket-engine/types";
 import {
   derivePersistedEventRowsState,
+  hasEffectiveScoringActionEvents,
   isPersistedScoringEventRow,
   type PersistedScoringEventRow,
 } from "@/lib/app-scorer/replay";
@@ -242,7 +243,7 @@ function currentParticipants(
   nonStrikerParticipantId: string | null;
   bowlerParticipantId: string | null;
 } {
-  if (rows.length === 0) {
+  if (!hasEffectiveScoringActionEvents(rows)) {
     return requireOpeningConfiguration(innings);
   }
 
@@ -253,16 +254,30 @@ function currentParticipants(
   };
 }
 
-function nextSequenceKey(
-  rows: PersistedScoringEventRow[],
-): number {
-  if (rows.length === 0) {
+async function nextSessionSequenceKey(
+  scoringSessionId: string,
+): Promise<number> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("scoring_events")
+    .select("sequence_key")
+    .eq("scoring_session_id", scoringSessionId)
+    .order("sequence_key", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Unable to determine next scoring sequence: ${error.message}`,
+    );
+  }
+
+  if (!data) {
     return 1;
   }
 
-  return Math.max(
-    ...rows.map((row) => row.sequence_key),
-  ) + 1;
+  return data.sequence_key + 1;
 }
 
 async function loadScorerData(
@@ -301,6 +316,11 @@ export async function getScorerSnapshot(
   const { innings, rows, state } =
     await loadScorerData(inningsId);
 
+  const nextSequenceKey =
+    await nextSessionSequenceKey(
+      innings.scoring_session_id,
+  );
+
   const participants = currentParticipants(
     innings,
     rows,
@@ -326,7 +346,7 @@ export async function getScorerSnapshot(
       participants.bowlerParticipantId,
     previousOverBowlerParticipantId:
       state.previousOverBowlerId,
-    nextSequenceKey: nextSequenceKey(rows),
+    nextSequenceKey,
     eventCount: rows.length,
     state,
   };

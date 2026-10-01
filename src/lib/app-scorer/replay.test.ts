@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   derivePersistedEventRowsState,
+  hasEffectiveScoringActionEvents,
   persistedRowToCricketEvent,
   type PersistedScoringEventRow,
 } from "./replay";
@@ -134,4 +135,55 @@ describe("App Scorer persisted-event replay", () => {
       persistedRowToCricketEvent(row),
     ).toThrow(/mismatched payload ID/i);
   });
+  it("reports no effective scoring actions when the first delivery has been voided", () => {
+  const deliveryEventId =
+    "11111111-1111-4111-8111-111111111111";
+  const voidEventId =
+    "22222222-2222-4222-8222-222222222222";
+
+  const rows: PersistedScoringEventRow[] = [
+    {
+      event_id: deliveryEventId,
+      sequence_key: 1,
+      event_type: "DELIVERY",
+      payload: {
+        id: deliveryEventId,
+        type: "DELIVERY",
+        strikerId: "batter-one",
+        nonStrikerId: "batter-two",
+        bowlerId: "bowler-one",
+        batRuns: 1,
+      },
+    },
+    {
+      event_id: voidEventId,
+      sequence_key: 2,
+      event_type: "EVENT_VOIDED",
+      payload: {
+        id: voidEventId,
+        type: "EVENT_VOIDED",
+        targetEventId: deliveryEventId,
+      },
+    },
+  ];
+
+  expect(
+    hasEffectiveScoringActionEvents(rows),
+  ).toBe(false);
+
+  const state = derivePersistedEventRowsState(
+    rows,
+    {
+      scheduledBalls: 120,
+      targetRuns: null,
+    },
+  );
+
+  expect(state.runs).toBe(0);
+  expect(state.wickets).toBe(0);
+  expect(state.legalBalls).toBe(0);
+  expect(state.strikerId).toBeNull();
+  expect(state.nonStrikerId).toBeNull();
+  expect(state.currentBowlerId).toBeNull();
+});
 });

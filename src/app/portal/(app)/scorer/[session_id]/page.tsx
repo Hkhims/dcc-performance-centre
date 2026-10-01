@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getScorerSnapshot } from "@/lib/app-scorer/scoring-service";
+import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
 import { createClient } from "@/lib/supabase/server";
 import ScorerControls from "./ScorerControls";
+import InningsBreakControls from "./InningsBreakControls";
 
 type PageProps = {
   params: Promise<{ session_id: string }>;
@@ -49,7 +51,7 @@ export default async function ScorerPage({ params }: PageProps) {
     redirect("/portal");
   }
 
-  const { data: inningsData, error: inningsError } =
+    const { data: inningsData, error: inningsError } =
     await supabase
       .from("scoring_innings")
       .select("innings_id,batting_side_id,bowling_side_id")
@@ -60,15 +62,263 @@ export default async function ScorerPage({ params }: PageProps) {
       .maybeSingle();
 
   if (inningsError) {
-    throw new Error(`Unable to load active innings: ${inningsError.message}`);
+    throw new Error(
+      `Unable to load active innings: ${inningsError.message}`,
+    );
   }
 
   const innings = inningsData as InningsLookupRow | null;
+
   if (!innings) {
-    throw new Error("This scoring session does not have an innings in progress.");
+    const { data: firstInningsData, error: firstInningsError } =
+      await supabase
+        .from("scoring_innings")
+        .select(
+          "innings_id,batting_side_id,bowling_side_id,status",
+        )
+        .eq("scoring_session_id", scoringSessionId)
+        .eq("innings_number", 1)
+        .maybeSingle();
+
+    if (firstInningsError) {
+      throw new Error(
+        `Unable to load first innings: ${firstInningsError.message}`,
+      );
+    }
+
+    if (
+      !firstInningsData ||
+      firstInningsData.status !== "Completed"
+    ) {
+      throw new Error(
+        "This scoring session does not have an innings in progress.",
+      );
+    }
+
+    const { data: secondInningsData, error: secondInningsError } =
+      await supabase
+        .from("scoring_innings")
+        .select("innings_id,batting_side_id,bowling_side_id,status")
+        .eq("scoring_session_id", scoringSessionId)
+        .eq("innings_number", 2)
+        .maybeSingle();
+
+    if (secondInningsData?.status === "Completed") {
+  const [firstInningsSnapshot, secondInningsSnapshot] =
+    await Promise.all([
+      getScorerSnapshot(firstInningsData.innings_id),
+      getScorerSnapshot(secondInningsData.innings_id),
+    ]);
+
+  const matchState = deriveMatchState([
+    {
+      battingSideId: firstInningsData.batting_side_id,
+      bowlingSideId: firstInningsData.bowling_side_id,
+      runs: firstInningsSnapshot.runs,
+      wickets: firstInningsSnapshot.wickets,
+      completed: true,
+    },
+    {
+      battingSideId: secondInningsData.batting_side_id,
+      bowlingSideId: secondInningsData.bowling_side_id,
+      runs: secondInningsSnapshot.runs,
+      wickets: secondInningsSnapshot.wickets,
+      completed: true,
+    },
+  ]);
+
+  if (!matchState.completed || !matchState.result) {
+    throw new Error(
+      "The completed innings did not produce a valid match result.",
+    );
   }
 
-  const snapshot = await getScorerSnapshot(innings.innings_id);
+  const { data: sideData, error: sideError } = await supabase
+    .from("match_sides")
+    .select("side_id,display_name")
+    .eq("scoring_session_id", scoringSessionId);
+
+  if (sideError) {
+    throw new Error(
+      `Unable to load match sides: ${sideError.message}`,
+    );
+  }
+
+  const sideName = (sideId: string) =>
+    sideData?.find((side) => side.side_id === sideId)
+      ?.display_name ?? "Unknown side";
+
+  let resultText: string;
+
+  if (matchState.result.type === "WIN") {
+    resultText =
+      matchState.result.method === "RUNS"
+        ? `${sideName(matchState.result.winnerSideId)} won by ${matchState.result.runMargin} runs`
+        : `${sideName(matchState.result.winnerSideId)} won the match`;
+  } else if (matchState.result.type === "TIE") {
+    resultText = "Match tied";
+  } else {
+    resultText = `Match abandoned: ${matchState.result.reason}`;
+  }
+
+  return (
+    <main className="min-h-screen bg-[#05070d] px-4 py-8 text-white sm:px-6 sm:py-12">
+      <div className="mx-auto w-full max-w-5xl">
+        <header className="border-b border-white/10 pb-6">
+          <Link
+            href="/portal/team-admin"
+            className="text-sm font-medium text-zinc-400 transition hover:text-amber-400"
+          >
+            ← Back to Team Admin
+          </Link>
+
+          <p className="mt-6 text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
+            DCC App Scorer
+          </p>
+
+          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+            Match Complete
+          </h1>
+        </header>
+
+        <section className="py-8">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-6 sm:p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Final Result
+            </p>
+
+            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
+              {resultText}
+            </h2>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+                <p className="text-sm text-zinc-500">1st Innings</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {sideName(firstInningsData.batting_side_id)}
+                </p>
+                <p className="mt-1 text-3xl font-black">
+                  {firstInningsSnapshot.runs}/
+                  {firstInningsSnapshot.wickets}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+                <p className="text-sm text-zinc-500">2nd Innings</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {sideName(secondInningsData.batting_side_id)}
+                </p>
+                <p className="mt-1 text-3xl font-black">
+                  {secondInningsSnapshot.runs}/
+                  {secondInningsSnapshot.wickets}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+if (secondInningsData) {
+  throw new Error(
+    `The second innings is ${secondInningsData.status} but is not currently in progress.`,
+  );
+}
+
+    if (secondInningsData) {
+      throw new Error(
+        "The second innings exists but is not currently in progress.",
+      );
+    }
+
+    const firstInningsSnapshot = await getScorerSnapshot(
+      firstInningsData.innings_id,
+    );
+
+    const { data: participantData, error: participantError } =
+      await supabase
+        .from("match_participants")
+        .select(
+          "match_participant_id,side_id,display_name,participant_role,participation_status",
+        )
+        .eq("scoring_session_id", scoringSessionId);
+
+    if (participantError) {
+      throw new Error(
+        `Unable to load scorer participants: ${participantError.message}`,
+      );
+    }
+
+    const participants =
+      (participantData ?? []) as ParticipantRow[];
+
+    const playingParticipants = participants.filter(
+      (participant) =>
+        participant.participant_role === "PLAYING" &&
+        participant.participation_status !== "REMOVED",
+    );
+
+    const secondInningsBatters = playingParticipants
+      .filter(
+        (participant) =>
+          participant.side_id ===
+          firstInningsData.bowling_side_id,
+      )
+      .map((participant) => ({
+        participantId: participant.match_participant_id,
+        displayName: participant.display_name,
+      }));
+
+    const secondInningsBowlers = playingParticipants
+      .filter(
+        (participant) =>
+          participant.side_id ===
+          firstInningsData.batting_side_id,
+      )
+      .map((participant) => ({
+        participantId: participant.match_participant_id,
+        displayName: participant.display_name,
+      }));
+
+    return (
+      <main className="min-h-screen bg-[#05070d] px-4 py-8 text-white sm:px-6 sm:py-12">
+        <div className="mx-auto w-full max-w-5xl">
+          <header className="border-b border-white/10 pb-6">
+            <Link
+              href="/portal/team-admin"
+              className="text-sm font-medium text-zinc-400 transition hover:text-amber-400"
+            >
+              ← Back to Team Admin
+            </Link>
+
+            <p className="mt-6 text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
+              DCC App Scorer
+            </p>
+
+            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+              Innings Break
+            </h1>
+          </header>
+
+          <section className="py-8">
+            <InningsBreakControls
+              scoringSessionId={scoringSessionId}
+              firstInningsId={firstInningsData.innings_id}
+              firstInningsRuns={firstInningsSnapshot.runs}
+              battingParticipants={secondInningsBatters}
+              bowlingParticipants={secondInningsBowlers}
+            />
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  const snapshot = await getScorerSnapshot(
+    innings.innings_id,
+  );
 
   const { data: externalSideData, error: externalSideError } =
     await supabase

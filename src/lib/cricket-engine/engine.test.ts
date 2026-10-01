@@ -610,7 +610,8 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
-            fielderIds: ["fielder-1"],
+          runOutEnd: "STRIKER_END",
+          fielderIds: ["fielder-1"],
         },
       },
     ];
@@ -640,6 +641,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
             fielderIds: ["fielder-1"],
         },
       },
@@ -668,6 +670,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "venky",
+          runOutEnd: "NON_STRIKER_END",
             fielderIds: ["fielder-1"],
         },
       },
@@ -696,6 +699,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "NON_STRIKER_END",
             fielderIds: ["fielder-1"],
         },
       },
@@ -709,34 +713,39 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
     expect(state.nonStrikerId).toBeNull();
     expect(state.bowlers["bowler-1"].wickets).toBe(0);
   });
-  it("places the surviving striker at the non-striker end after one completed run and a non-striker run-out", () => {
-    const events: CricketEvent[] = [
-      {
-        id: "non-striker-run-out-one-run",
-        type: "DELIVERY",
-        strikerId: "himanshu",
-        nonStrikerId: "venky",
-        bowlerId: "bowler-1",
-        batRuns: 1,
-        running: {
-          completedRuns: 1,
-        },
-        wicket: {
-          type: "RUN_OUT",
-          dismissedBatterId: "venky",
-            fielderIds: ["fielder-1"],
-        },
-      },
-    ];
-    const state = deriveInningsState(events);
-    expect(state.runs).toBe(1);
-    expect(state.wickets).toBe(1);
-    expect(state.batters.himanshu.runs).toBe(1);
-    expect(state.batters.venky.dismissed).toBe(true);
-    expect(state.strikerId).toBeNull();
-    expect(state.nonStrikerId).toBe("himanshu");
-    expect(state.bowlers["bowler-1"].wickets).toBe(0);
-  });
+  it("keeps the surviving striker at the striker end when the non-striker is run out at the non-striker end after one completed run", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "non-striker-run-out-one-run-non-striker-end",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 1,
+      running: {
+        completedRuns: 1,
+      },
+      wicket: {
+        type: "RUN_OUT",
+        dismissedBatterId: "venky",
+        runOutEnd: "NON_STRIKER_END",
+        fielderIds: ["fielder-1"],
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(1);
+  expect(state.wickets).toBe(1);
+  expect(state.batters.himanshu.runs).toBe(1);
+  expect(state.batters.venky.dismissed).toBe(true);
+
+  expect(state.strikerId).toBe("himanshu");
+  expect(state.nonStrikerId).toBeNull();
+
+  expect(state.bowlers["bowler-1"].wickets).toBe(0);
+});
   it("scores a wide plus run-out without consuming a legal ball or crediting the bowler with a wicket", () => {
     const events: CricketEvent[] = [
       {
@@ -755,6 +764,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
             fielderIds: ["fielder-1"],
         },
       },
@@ -792,7 +802,8 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
-            fielderIds: ["fielder-1"],
+          runOutEnd: "STRIKER_END",
+          fielderIds: ["fielder-1"],
         },
       },
     ];
@@ -829,6 +840,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd:"NON_STRIKER_END",
           fielderIds: ["fielder-1"],
         },
       },
@@ -877,6 +889,7 @@ it("rejects an entire delivery that would create an 11th wicket", () => {
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "venky",
+          runOutEnd: "STRIKER_END",
           fielderIds: ["fielder-1"],
         },
       },
@@ -1043,6 +1056,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
           fielderIds: ["fielder-1"],
         },
       },
@@ -1070,6 +1084,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
           fielderIds: ["fielder-1", "fielder-2"],
         },
       },
@@ -1093,6 +1108,7 @@ it("preserves strike when two runs are completed but one is called short", () =>
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
           fielderIds: ["fielder-1", "fielder-1"],
         },
       },
@@ -2321,6 +2337,7 @@ it("allows the scorer to confirm an innings ended after reaching the target", ()
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "himanshu",
+          runOutEnd: "STRIKER_END",
           fielderIds: ["fielder-1"],
         },
       },
@@ -2426,6 +2443,7 @@ it("allows the scorer to confirm an innings ended after reaching the target", ()
         wicket: {
           type: "RUN_OUT",
           dismissedBatterId: "venky",
+          runOutEnd: "NON_STRIKER_END",
           fielderIds: ["fielder-1"],
         },
       },
@@ -2462,6 +2480,30 @@ it("allows the scorer to confirm an innings ended after reaching the target", ()
     expect(state.legalBalls).toBe(0);
     expect(state.batters).toEqual({});
   });
+
+  it("ignores a non-run-out dismissal of the non-striker", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "invalid-non-striker-lbw",
+      type: "DELIVERY",
+      strikerId: "himanshu",
+      nonStrikerId: "venky",
+      bowlerId: "bowler-1",
+      batRuns: 0,
+      wicket: {
+        type: "LBW",
+        dismissedBatterId: "venky",
+      },
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.runs).toBe(0);
+  expect(state.wickets).toBe(0);
+  expect(state.legalBalls).toBe(0);
+  expect(state.batters).toEqual({});
+});
 
   it("ignores negative batting runs", () => {
     const events: CricketEvent[] = [
@@ -2888,7 +2930,7 @@ it("keeps the latest valid replacement when a later replacement is invalid", () 
   it("records unresolved catch and run-out attribution without inventing a fielder", () => {
     const state = deriveInningsState([
       { id: "unknown-catch", type: "DELIVERY", strikerId: "batter-1", nonStrikerId: "batter-2", bowlerId: "bowler-1", batRuns: 0, wicket: { type: "CAUGHT", dismissedBatterId: "batter-1" } },
-      { id: "unknown-run-out", type: "DELIVERY", strikerId: "batter-3", nonStrikerId: "batter-2", bowlerId: "bowler-1", batRuns: 0, wicket: { type: "RUN_OUT", dismissedBatterId: "batter-3", fielderIds: [] } },
+      { id: "unknown-run-out", type: "DELIVERY", strikerId: "batter-3", nonStrikerId: "batter-2", bowlerId: "bowler-1", batRuns: 0, wicket: { type: "RUN_OUT", dismissedBatterId: "batter-3", runOutEnd: "STRIKER_END", fielderIds: [] } },
     ]);
     expect(state.wickets).toBe(2);
     expect(state.bowlers["bowler-1"].wickets).toBe(1);

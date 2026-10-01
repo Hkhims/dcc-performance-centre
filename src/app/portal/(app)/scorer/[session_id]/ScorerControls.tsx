@@ -108,6 +108,9 @@ export default function ScorerControls({
     "BAT" | "BYE" | "LEG_BYE"
   >("BAT");
   const [wicketRuns, setWicketRuns] = useState(0);
+  const [runOutEnd, setRunOutEnd] = useState<
+    "STRIKER_END" | "NON_STRIKER_END"
+  >("STRIKER_END");
   function record(
     label: string,
     input: Parameters<
@@ -146,6 +149,7 @@ export default function ScorerControls({
         resetDeliveryDetails();
         setExtraPanel(null);
         setNoBallMode("BAT");
+        setConfirmedIncomingBatterId(null);
         router.refresh();
       }
     });
@@ -230,109 +234,189 @@ export default function ScorerControls({
     );
     setLiveOppositionName("");
   }
+
+  const effectiveStrikerParticipantId =
+    strikerParticipantId ??
+    (nonStrikerParticipantId
+      ? confirmedIncomingBatterId
+      : null);
+
+  const effectiveNonStrikerParticipantId =
+    nonStrikerParticipantId ??
+    (strikerParticipantId
+      ? confirmedIncomingBatterId
+      : null);
+
   function recordWicket() {
-    if (!dismissedBatterId) {
-      setMessage("Choose the dismissed batter.");
-      setMessageIsError(true);
-      return;
-    }
-    const unknownFielder = fielderId === "__UNKNOWN__";
-    const needsKnownFielder = wicketType === "STUMPED";
-    if (needsKnownFielder && (!fielderId || unknownFielder)) {
-      setMessage("Choose the wicketkeeper for a stumping.");
-      setMessageIsError(true);
-      return;
-    }
-    if (
-      (wicketType === "CAUGHT" || wicketType === "RUN_OUT") &&
-      !fielderId
-    ) {
-      setMessage("Choose a fielder or Unknown / Not sure.");
-      setMessageIsError(true);
-      return;
-    }
-    if (
-      wicketDeliveryKind === "WIDE" &&
-      wicketType !== "STUMPED" &&
-      wicketType !== "RUN_OUT"
-    ) {
-      setMessage("Only stumped or run out can be recorded from a wide.");
-      setMessageIsError(true);
-      return;
-    }
-    if (
-      wicketDeliveryKind === "NO_BALL" &&
-      wicketType !== "RUN_OUT"
-    ) {
-      setMessage("Only run out can be recorded from a no-ball.");
-      setMessageIsError(true);
-      return;
-    }
-    if (wicketType !== "RUN_OUT" && wicketRuns !== 0) {
-      setMessage("Runs with a wicket are currently supported for run-outs only.");
-      setMessageIsError(true);
-      return;
-    }
-    let wicket:
-      | { type: "BOWLED" | "LBW" | "HIT_WICKET" | "CAUGHT_AND_BOWLED"; dismissedBatterId: string }
-      | { type: "CAUGHT"; dismissedBatterId: string; fielderId?: string }
-      | { type: "STUMPED"; dismissedBatterId: string; fielderId: string }
-      | { type: "RUN_OUT"; dismissedBatterId: string; fielderIds: string[] };
-    if (wicketType === "CAUGHT") {
-      wicket = unknownFielder
-        ? { type: "CAUGHT", dismissedBatterId }
-        : { type: "CAUGHT", dismissedBatterId, fielderId };
-    } else if (wicketType === "STUMPED") {
-      wicket = { type: "STUMPED", dismissedBatterId, fielderId };
-    } else if (wicketType === "RUN_OUT") {
-      wicket = {
-        type: "RUN_OUT",
-        dismissedBatterId,
-        fielderIds: unknownFielder ? [] : [fielderId],
+  const effectiveDismissedBatterId =
+    wicketType === "RUN_OUT"
+      ? dismissedBatterId
+      : effectiveStrikerParticipantId;
+
+  if (!effectiveDismissedBatterId) {
+    setMessage(
+      wicketType === "RUN_OUT"
+        ? "Choose the dismissed batter."
+        : "The striker must be selected before recording this wicket.",
+    );
+    setMessageIsError(true);
+    return;
+  }
+
+  const unknownFielder = fielderId === "__UNKNOWN__";
+  const needsKnownFielder = wicketType === "STUMPED";
+
+  if (needsKnownFielder && (!fielderId || unknownFielder)) {
+    setMessage("Choose the wicketkeeper for a stumping.");
+    setMessageIsError(true);
+    return;
+  }
+
+  if (
+    (wicketType === "CAUGHT" || wicketType === "RUN_OUT") &&
+    !fielderId
+  ) {
+    setMessage("Choose a fielder or Unknown / Not sure.");
+    setMessageIsError(true);
+    return;
+  }
+
+  if (
+    wicketDeliveryKind === "WIDE" &&
+    wicketType !== "STUMPED" &&
+    wicketType !== "RUN_OUT"
+  ) {
+    setMessage("Only stumped or run out can be recorded from a wide.");
+    setMessageIsError(true);
+    return;
+  }
+
+  if (
+    wicketDeliveryKind === "NO_BALL" &&
+    wicketType !== "RUN_OUT"
+  ) {
+    setMessage("Only run out can be recorded from a no-ball.");
+    setMessageIsError(true);
+    return;
+  }
+
+  if (wicketType !== "RUN_OUT" && wicketRuns !== 0) {
+    setMessage("Runs with a wicket are currently supported for run-outs only.");
+    setMessageIsError(true);
+    return;
+  }
+
+  let wicket:
+    | {
+        type: "BOWLED" | "LBW" | "HIT_WICKET" | "CAUGHT_AND_BOWLED";
+        dismissedBatterId: string;
+      }
+    | {
+        type: "CAUGHT";
+        dismissedBatterId: string;
+        fielderId?: string;
+      }
+    | {
+        type: "STUMPED";
+        dismissedBatterId: string;
+        fielderId: string;
+      }
+    | {
+        type: "RUN_OUT";
+        dismissedBatterId: string;
+        runOutEnd: "STRIKER_END" | "NON_STRIKER_END";
+        fielderIds: string[];
       };
-    } else {
-      wicket = { type: wicketType, dismissedBatterId };
-    }
-    if (wicketDeliveryKind === "WIDE") {
-      record("WICKET_WIDE", {
-        batRuns: 0,
-        extras: { wides: wicketRuns + 1 },
-        completedRuns: wicketRuns,
-        wicket,
-      });
-      return;
-    }
-    if (wicketDeliveryKind === "NO_BALL") {
-      const extras =
-        wicketRunKind === "BYE"
-          ? { noBalls: 1, ...(wicketRuns > 0 ? { byes: wicketRuns } : {}) }
-          : wicketRunKind === "LEG_BYE"
-            ? { noBalls: 1, ...(wicketRuns > 0 ? { legByes: wicketRuns } : {}) }
-            : { noBalls: 1 };
-      record("WICKET_NO_BALL", {
-        batRuns: wicketRunKind === "BAT" ? wicketRuns as 0 | 1 | 2 | 3 | 4 : 0,
-        extras,
-        completedRuns: wicketRuns,
-        wicket,
-      });
-      return;
-    }
-    const extras =
-      wicketRunKind === "BYE" && wicketRuns > 0
-        ? { byes: wicketRuns }
-        : wicketRunKind === "LEG_BYE" && wicketRuns > 0
-          ? { legByes: wicketRuns }
-          : undefined;
-    record("WICKET_LEGAL", {
-      batRuns: wicketRunKind === "BAT" ? wicketRuns as 0 | 1 | 2 | 3 | 4 : 0,
-      extras,
-      completedRuns: extras ? wicketRuns : undefined,
+
+  if (wicketType === "CAUGHT") {
+    wicket = unknownFielder
+      ? {
+          type: "CAUGHT",
+          dismissedBatterId: effectiveDismissedBatterId,
+        }
+      : {
+          type: "CAUGHT",
+          dismissedBatterId: effectiveDismissedBatterId,
+          fielderId,
+        };
+  } else if (wicketType === "STUMPED") {
+    wicket = {
+      type: "STUMPED",
+      dismissedBatterId: effectiveDismissedBatterId,
+      fielderId,
+    };
+  } else if (wicketType === "RUN_OUT") {
+    wicket = {
+      type: "RUN_OUT",
+      dismissedBatterId: effectiveDismissedBatterId,
+      runOutEnd,
+      fielderIds: unknownFielder ? [] : [fielderId],
+    };
+  } else {
+    wicket = {
+      type: wicketType,
+      dismissedBatterId: effectiveDismissedBatterId,
+    };
+  }
+
+  if (wicketDeliveryKind === "WIDE") {
+    record("WICKET_WIDE", {
+      batRuns: 0,
+      extras: { wides: wicketRuns + 1 },
+      completedRuns: wicketRuns,
       wicket,
     });
+    return;
   }
+
+  if (wicketDeliveryKind === "NO_BALL") {
+    const extras =
+      wicketRunKind === "BYE"
+        ? {
+            noBalls: 1,
+            ...(wicketRuns > 0 ? { byes: wicketRuns } : {}),
+          }
+        : wicketRunKind === "LEG_BYE"
+          ? {
+              noBalls: 1,
+              ...(wicketRuns > 0 ? { legByes: wicketRuns } : {}),
+            }
+          : { noBalls: 1 };
+
+    record("WICKET_NO_BALL", {
+      batRuns:
+        wicketRunKind === "BAT"
+          ? (wicketRuns as 0 | 1 | 2 | 3 | 4)
+          : 0,
+      extras,
+      completedRuns: wicketRuns,
+      wicket,
+    });
+    return;
+  }
+
+  const extras =
+    wicketRunKind === "BYE" && wicketRuns > 0
+      ? { byes: wicketRuns }
+      : wicketRunKind === "LEG_BYE" && wicketRuns > 0
+        ? { legByes: wicketRuns }
+        : undefined;
+
+  record("WICKET_LEGAL", {
+    batRuns:
+      wicketRunKind === "BAT"
+        ? (wicketRuns as 0 | 1 | 2 | 3 | 4)
+        : 0,
+    extras,
+    completedRuns: extras ? wicketRuns : undefined,
+    wicket,
+  });
+}
+
   const missingBatter =
     strikerParticipantId === null || nonStrikerParticipantId === null;
   const missingBowler = bowlerParticipantId === null;
+
   const excludedBatterId =
     strikerParticipantId ?? nonStrikerParticipantId;
   const availableIncomingBatters = battingParticipants.filter(
@@ -943,6 +1027,9 @@ export default function ScorerControls({
               onChange={(event) => {
                 const nextType = event.target.value as typeof wicketType;
                 setWicketType(nextType);
+                if (nextType === "RUN_OUT") {
+                  setRunOutEnd("STRIKER_END");
+                }
                 if (nextType !== "RUN_OUT") {
                   setWicketRuns(0);
                 }
@@ -960,20 +1047,40 @@ export default function ScorerControls({
               <option value="RUN_OUT">Run Out</option>
               <option value="HIT_WICKET">Hit Wicket</option>
             </select>
+          {wicketType === "RUN_OUT" ? (
             <select
               value={dismissedBatterId}
               onChange={(event) => setDismissedBatterId(event.target.value)}
               className="rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm"
             >
               <option value="">Dismissed batter</option>
-              {[strikerParticipantId, nonStrikerParticipantId]
+              {[effectiveStrikerParticipantId, effectiveNonStrikerParticipantId]
                 .filter((id): id is string => Boolean(id))
                 .map((id) => (
                   <option key={id} value={id}>
-                    {battingParticipants.find((p) => p.participantId === id)?.displayName ?? id}
+                    {battingParticipants.find(
+                      (participant) => participant.participantId === id,
+                    )?.displayName ?? id}
                   </option>
                 ))}
             </select>
+          ) : null}
+            {wicketType === "RUN_OUT" ? (
+  <select
+    value={runOutEnd}
+    onChange={(event) =>
+      setRunOutEnd(
+        event.target.value as "STRIKER_END" | "NON_STRIKER_END",
+      )
+    }
+    className="rounded-xl border border-white/10 bg-zinc-950 px-3 py-3 text-sm"
+  >
+    <option value="STRIKER_END">Run out at striker&apos;s end</option>
+    <option value="NON_STRIKER_END">
+      Run out at non-striker&apos;s end
+    </option>
+  </select>
+) : null}
             {(wicketType === "CAUGHT" ||
               wicketType === "STUMPED" ||
               wicketType === "RUN_OUT") ? (

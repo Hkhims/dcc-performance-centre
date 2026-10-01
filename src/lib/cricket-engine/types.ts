@@ -48,6 +48,7 @@ export type CaughtAndBowledWicket = {
 export type RunOutWicket = {
   type: "RUN_OUT";
   dismissedBatterId: ParticipantId;
+  runOutEnd: "STRIKER_END" | "NON_STRIKER_END";
   /**
    * Empty when the run-out is known but the scorer cannot identify a fielder.
    * This deliberately records unresolved attribution rather than inventing a player.

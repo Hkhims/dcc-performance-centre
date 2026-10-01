@@ -521,6 +521,113 @@ export async function endInningsAction(
   }
 }
 
+export async function startSecondInningsAction(
+  scoringSessionId: string,
+  firstInningsId: string,
+  strikerParticipantId: string,
+  nonStrikerParticipantId: string,
+  bowlerParticipantId: string,
+): Promise<ScorerActionResult> {
+  try {
+    if (
+      !strikerParticipantId ||
+      !nonStrikerParticipantId ||
+      !bowlerParticipantId
+    ) {
+      return {
+        ok: false,
+        message:
+          "Choose the striker, non-striker and opening bowler.",
+      };
+    }
+
+    if (strikerParticipantId === nonStrikerParticipantId) {
+      return {
+        ok: false,
+        message:
+          "Striker and non-striker must be different players.",
+      };
+    }
+
+    const { signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const firstInningsSnapshot =
+      await getScorerSnapshot(firstInningsId);
+
+    if (
+      firstInningsSnapshot.scoringSessionId !==
+      scoringSessionId
+    ) {
+      return {
+        ok: false,
+        message:
+          "The innings does not belong to this scoring session.",
+      };
+    }
+
+    if (firstInningsSnapshot.inningsStatus !== "Completed") {
+      return {
+        ok: false,
+        message:
+          "The first innings must be completed before the second innings can start.",
+      };
+    }
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc(
+      "start_app_scorer_second_innings",
+      {
+        target_scoring_session_id: scoringSessionId,
+        target_striker_participant_id:
+          strikerParticipantId,
+        target_non_striker_participant_id:
+          nonStrikerParticipantId,
+        target_bowler_participant_id:
+          bowlerParticipantId,
+        target_first_innings_runs:
+          firstInningsSnapshot.runs,
+      },
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    if (typeof data !== "string" || !data) {
+      return {
+        ok: false,
+        message:
+          "No second-innings ID was returned.",
+      };
+    }
+
+    revalidatePath(
+      `/portal/scorer/${scoringSessionId}`,
+    );
+
+    return {
+      ok: true,
+      message: "Second innings started.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
 export async function undoLastBallAction(
   scoringSessionId: string,
   inningsId: string,

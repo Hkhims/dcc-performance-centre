@@ -1,4 +1,7 @@
-import { deriveInningsState } from "../cricket-engine/engine";
+import {
+  deriveInningsState,
+  resolveEffectiveEvents,
+} from "../cricket-engine/engine";
 import type {
   CricketEvent,
   InningsPlayingConditions,
@@ -90,6 +93,20 @@ function toPlayingConditions(
   }
 
   return conditions;
+}
+
+export function hasEffectiveScoringActionEvents(
+  rows: PersistedScoringEventRow[],
+): boolean {
+  const orderedRows = [...rows].sort(
+    (a, b) => a.sequence_key - b.sequence_key,
+  );
+
+  const events = orderedRows.map(
+    persistedRowToCricketEvent,
+  );
+
+  return resolveEffectiveEvents(events).length > 0;
 }
 
 export function derivePersistedEventRowsState(
