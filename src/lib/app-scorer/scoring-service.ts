@@ -514,3 +514,70 @@ export async function undoLastBall(input: {
     state: await derivePersistedInningsState(input.inningsId),
   };
 }
+export type CompleteAppScorerMatchInput =
+  | {
+      scoringSessionId: string;
+      resultType: "WIN";
+      winnerSideId: string;
+      loserSideId: string;
+      winMethod: "RUNS";
+      runMargin: number;
+      wicketMargin: null;
+      abandonmentReason: null;
+    }
+  | {
+      scoringSessionId: string;
+      resultType: "WIN";
+      winnerSideId: string;
+      loserSideId: string;
+      winMethod: "CHASE";
+      runMargin: null;
+      wicketMargin: number;
+      abandonmentReason: null;
+    }
+  | {
+      scoringSessionId: string;
+      resultType: "TIE";
+      winnerSideId: null;
+      loserSideId: null;
+      winMethod: null;
+      runMargin: null;
+      wicketMargin: null;
+      abandonmentReason: null;
+    }
+  | {
+      scoringSessionId: string;
+      resultType: "ABANDONED";
+      winnerSideId: null;
+      loserSideId: null;
+      winMethod: null;
+      runMargin: null;
+      wicketMargin: null;
+      abandonmentReason: string;
+    };
+
+export async function completeAppScorerMatch(
+  input: CompleteAppScorerMatchInput,
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc(
+    "complete_app_scorer_match",
+    {
+      target_scoring_session_id: input.scoringSessionId,
+      target_result_type: input.resultType,
+      target_winner_side_id: input.winnerSideId,
+      target_loser_side_id: input.loserSideId,
+      target_win_method: input.winMethod,
+      target_run_margin: input.runMargin,
+      target_wicket_margin: input.wicketMargin,
+      target_abandonment_reason: input.abandonmentReason,
+    },
+  );
+
+  if (error) {
+    throw new Error(
+      `Unable to complete match: ${error.message}`,
+    );
+  }
+}

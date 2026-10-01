@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  completeAppScorerMatch,
   getScorerSnapshot,
   recordDelivery,
   recordInningsEnded,
   recordOverEnded,
   undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
+import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
 import { saveDeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment-service";
 import type { DeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment";
 import type { DeliveryBoundary } from "@/lib/cricket-engine/types";
@@ -512,6 +514,162 @@ export async function endInningsAction(
     return {
       ok: true,
       message: "Innings ended.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
+export async function completeMatchAction(
+  scoringSessionId: string,
+  firstInningsId: string,
+  secondInningsId: string,
+): Promise<ScorerActionResult> {
+  try {
+    const { signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const [firstInningsSnapshot, secondInningsSnapshot] =
+      await Promise.all([
+        getScorerSnapshot(firstInningsId),
+        getScorerSnapshot(secondInningsId),
+      ]);
+
+    if (
+      firstInningsSnapshot.scoringSessionId !== scoringSessionId ||
+      secondInningsSnapshot.scoringSessionId !== scoringSessionId
+    ) {
+      return {
+        ok: false,
+        message: "Both innings must belong to this scoring session.",
+      };
+    }
+
+    if (
+      firstInningsSnapshot.inningsStatus !== "Completed" ||
+      secondInningsSnapshot.inningsStatus !== "Completed"
+    ) {
+      return {
+        ok: false,
+        message: "Both innings must be completed before completing the match.",
+      };
+    }
+
+    const supabase = await createClient();
+
+    const { data: inningsData, error: inningsError } = await supabase
+      .from("scoring_innings")
+      .select("innings_id,batting_side_id,bowling_side_id")
+      .in("innings_id", [firstInningsId, secondInningsId]);
+
+    if (inningsError) {
+      return {
+        ok: false,
+        message: `Unable to load match innings: ${inningsError.message}`,
+      };
+    }
+
+    const firstInnings = inningsData?.find(
+      (innings) => innings.innings_id === firstInningsId,
+    );
+
+    const secondInnings = inningsData?.find(
+      (innings) => innings.innings_id === secondInningsId,
+    );
+
+    if (!firstInnings || !secondInnings) {
+      return {
+        ok: false,
+        message: "Unable to load both completed innings.",
+      };
+    }
+
+    const matchState = deriveMatchState([
+      {
+        battingSideId: firstInnings.batting_side_id,
+        bowlingSideId: firstInnings.bowling_side_id,
+        runs: firstInningsSnapshot.runs,
+        wickets: firstInningsSnapshot.wickets,
+        completed: true,
+      },
+      {
+        battingSideId: secondInnings.batting_side_id,
+        bowlingSideId: secondInnings.bowling_side_id,
+        runs: secondInningsSnapshot.runs,
+        wickets: secondInningsSnapshot.wickets,
+        completed: true,
+      },
+    ]);
+
+    if (!matchState.completed || !matchState.result) {
+      return {
+        ok: false,
+        message: "The completed innings did not produce a valid match result.",
+      };
+    }
+
+    if (matchState.result.type === "ABANDONED") {
+      return {
+        ok: false,
+        message: "Abandoned-match completion is not supported by this flow.",
+      };
+    }
+
+    if (
+  matchState.result.type === "WIN" &&
+  matchState.result.method === "RUNS"
+) {
+  await completeAppScorerMatch({
+    scoringSessionId,
+    resultType: "WIN",
+    winnerSideId: matchState.result.winnerSideId,
+    loserSideId: matchState.result.loserSideId,
+    winMethod: "RUNS",
+    runMargin: matchState.result.runMargin!,
+    wicketMargin: null,
+    abandonmentReason: null,
+  });
+} else if (
+  matchState.result.type === "WIN" &&
+  matchState.result.method === "CHASE"
+) {
+  await completeAppScorerMatch({
+    scoringSessionId,
+    resultType: "WIN",
+    winnerSideId: matchState.result.winnerSideId,
+    loserSideId: matchState.result.loserSideId,
+    winMethod: "CHASE",
+    runMargin: null,
+    wicketMargin: matchState.result.wicketMargin!,
+    abandonmentReason: null,
+  });
+} else {
+      await completeAppScorerMatch({
+        scoringSessionId,
+        resultType: "TIE",
+        winnerSideId: null,
+        loserSideId: null,
+        winMethod: null,
+        runMargin: null,
+        wicketMargin: null,
+        abandonmentReason: null,
+      });
+    }
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Match completed.",
     };
   } catch (error) {
     return {

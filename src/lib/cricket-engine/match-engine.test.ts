@@ -73,6 +73,7 @@ describe("deriveMatchState", () => {
       loserSideId: "dcc",
       method: "CHASE",
       runMargin: null,
+      wicketMargin: 5,
     });
   });
 
@@ -103,6 +104,7 @@ describe("deriveMatchState", () => {
       loserSideId: "opposition",
       method: "RUNS",
       runMargin: 10,
+      wicketMargin: null,
     });
   });
 
@@ -223,6 +225,7 @@ it("uses side identities rather than assuming DCC batted first", () => {
     loserSideId: "opposition",
     method: "CHASE",
     runMargin: null,
+    wicketMargin: 7,
   });
 });
 it("records a match abandoned before any innings begins", () => {
@@ -300,6 +303,7 @@ it("does not replace an already completed cricket result with a later abandonmen
     loserSideId: "opposition",
     method: "RUNS",
     runMargin: 10,
+    wicketMargin: null,
   });
 });
 it("allows abandonment after the first innings has completed but before the match has a result", () => {
@@ -380,5 +384,35 @@ it("does not derive a result when the second innings sides do not reverse the fi
 
   expect(state.completed).toBe(false);
   expect(state.result).toBeNull();
+});
+it("derives a neutral wicket-margin result for two internal sides", () => {
+  const innings: MatchInningsInput[] = [
+    {
+      battingSideId: "knights",
+      bowlingSideId: "warriors",
+      runs: 145,
+      wickets: 7,
+      completed: true,
+    },
+    {
+      battingSideId: "warriors",
+      bowlingSideId: "knights",
+      runs: 146,
+      wickets: 4,
+      completed: true,
+    },
+  ];
+
+  const state = deriveMatchState(innings);
+
+  expect(state.completed).toBe(true);
+  expect(state.result).toEqual({
+    type: "WIN",
+    winnerSideId: "warriors",
+    loserSideId: "knights",
+    method: "CHASE",
+    runMargin: null,
+    wicketMargin: 6,
+  });
 });
 });

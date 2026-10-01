@@ -22,6 +22,7 @@ export type MatchWinResult = {
   loserSideId: MatchSideId;
   method: "CHASE" | "RUNS";
   runMargin: number | null;
+  wicketMargin: number | null;
 };
 
 export type MatchTieResult = {
@@ -79,6 +80,7 @@ if (!sidesReverseCorrectly) {
       loserSideId: firstInnings.battingSideId,
       method: "CHASE",
       runMargin: null,
+      wicketMargin: 10 - secondInnings.wickets,
     };
   }
 
@@ -90,6 +92,7 @@ if (!sidesReverseCorrectly) {
       method: "RUNS",
       runMargin:
         firstInnings.runs - secondInnings.runs,
+      wicketMargin: null,
     };
   }
 

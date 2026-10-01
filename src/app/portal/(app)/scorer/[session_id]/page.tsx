@@ -5,6 +5,7 @@ import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
 import { createClient } from "@/lib/supabase/server";
 import ScorerControls from "./ScorerControls";
 import InningsBreakControls from "./InningsBreakControls";
+import CompleteMatchControl from "./CompleteMatchControl";
 
 type PageProps = {
   params: Promise<{ session_id: string }>;
@@ -50,6 +51,24 @@ export default async function ScorerPage({ params }: PageProps) {
   if (!access || access.account_status !== "Active") {
     redirect("/portal");
   }
+
+  const { data: sessionData, error: sessionError } = await supabase
+  .from("scoring_sessions")
+  .select("status")
+  .eq("scoring_session_id", scoringSessionId)
+  .maybeSingle();
+
+if (sessionError) {
+  throw new Error(
+    `Unable to load scoring session: ${sessionError.message}`,
+  );
+}
+
+if (!sessionData) {
+  throw new Error("Scoring session not found.");
+}
+
+const sessionStatus = sessionData.status;
 
     const { data: inningsData, error: inningsError } =
     await supabase
@@ -154,7 +173,7 @@ export default async function ScorerPage({ params }: PageProps) {
     resultText =
       matchState.result.method === "RUNS"
         ? `${sideName(matchState.result.winnerSideId)} won by ${matchState.result.runMargin} runs`
-        : `${sideName(matchState.result.winnerSideId)} won the match`;
+        : `${sideName(matchState.result.winnerSideId)} won by ${matchState.result.wicketMargin} wickets`;
   } else if (matchState.result.type === "TIE") {
     resultText = "Match tied";
   } else {
@@ -177,7 +196,9 @@ export default async function ScorerPage({ params }: PageProps) {
           </p>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-            Match Complete
+            {sessionStatus === "FinalReview"
+              ? "Final Review"
+              : "Match Complete"}
           </h1>
         </header>
 
@@ -213,11 +234,19 @@ export default async function ScorerPage({ params }: PageProps) {
                   {secondInningsSnapshot.wickets}
                 </p>
               </div>
+              {sessionStatus === "FinalReview" ? (
+  <CompleteMatchControl
+    scoringSessionId={scoringSessionId}
+    firstInningsId={firstInningsData.innings_id}
+    secondInningsId={secondInningsData.innings_id}
+  />
+) : null}
             </div>
           </div>
         </section>
       </div>
     </main>
+    
   );
 }
 
