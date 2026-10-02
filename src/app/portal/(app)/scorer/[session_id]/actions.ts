@@ -8,6 +8,9 @@ import {
   recordInningsEnded,
   recordOverEnded,
   recordBatterEntered,
+  abandonAppScorerMatch,
+  recordBreakStarted,
+  recordBreakEnded,
   undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
 import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
@@ -15,6 +18,7 @@ import { saveDeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment-ser
 import type { DeliveryEnrichment } from "@/lib/app-scorer/delivery-enrichment";
 import type { DeliveryBoundary } from "@/lib/cricket-engine/types";
 import { createClient } from "@/lib/supabase/server";
+import type { BreakReason } from "@/lib/cricket-engine/types";
 
 type ScorerActionResult = {
   ok: boolean;
@@ -726,6 +730,36 @@ export async function completeMatchAction(
   }
 }
 
+export async function abandonMatchAction(
+  scoringSessionId: string,
+  abandonmentReason: string,
+): Promise<ScorerActionResult> {
+  try {
+    const reason = abandonmentReason.trim();
+
+    if (!reason) {
+      return {
+        ok: false,
+        message: "Enter a reason for abandoning the match.",
+      };
+    }
+
+    await abandonAppScorerMatch(scoringSessionId, reason);
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Match abandoned.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
 export async function startSecondInningsAction(
   scoringSessionId: string,
   firstInningsId: string,
@@ -859,6 +893,79 @@ export async function undoLastBallAction(
   }
 }
 
+export async function startBreakAction(
+  scoringSessionId: string,
+  inningsId: string,
+  reason: BreakReason,
+  note?: string,
+): Promise<ScorerActionResult> {
+  try {
+    const snapshot = await getScorerSnapshot(inningsId);
+
+    if (snapshot.state.break.active) {
+      return {
+        ok: false,
+        message: "A break is already in progress.",
+      };
+    }
+
+    await recordBreakStarted({
+      eventId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+      sequenceKey: snapshot.nextSequenceKey,
+      reason,
+      note,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Break started.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
+
+export async function resumePlayAction(
+  scoringSessionId: string,
+  inningsId: string,
+): Promise<ScorerActionResult> {
+  try {
+    const snapshot = await getScorerSnapshot(inningsId);
+
+    if (!snapshot.state.break.active) {
+      return {
+        ok: false,
+        message: "There is no active break to end.",
+      };
+    }
+
+    await recordBreakEnded({
+      eventId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+      sequenceKey: snapshot.nextSequenceKey,
+    });
+
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Play resumed.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
 
 export async function addLiveOppositionPlayerAction(
   scoringSessionId: string,

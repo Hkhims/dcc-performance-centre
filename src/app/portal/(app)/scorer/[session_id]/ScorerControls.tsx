@@ -415,8 +415,7 @@ export default function ScorerControls({
 }
 
   const missingBatter =
-  endRecommendation.reason !== "ALL_OUT" &&
-  (strikerParticipantId === null || nonStrikerParticipantId === null);
+    strikerParticipantId === null || nonStrikerParticipantId === null;
   const missingBowler = bowlerParticipantId === null;
 
   const missingBatterEnd: "STRIKER" | "NON_STRIKER" | null =
@@ -1220,17 +1219,17 @@ export default function ScorerControls({
           </button>
         </div>
       ) : null}
-      {message ? (
-        <p
-          className={`mt-4 text-sm ${
-            messageIsError
-              ? "text-rose-300"
-              : "text-emerald-300"
-          }`}
-        >
-          {message}
-        </p>
-      ) : null}
+      {message && endRecommendation.reason !== "ALL_OUT" ? (
+      <p
+        className={`mt-4 text-sm ${
+          messageIsError
+            ? "text-rose-300"
+            : "text-emerald-300"
+        }`}
+      >
+        {message}
+      </p>
+    ) : null}
     </div>
   );
 }

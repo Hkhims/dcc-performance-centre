@@ -12,6 +12,7 @@ import {
   type PersistedScoringEventRow,
 } from "@/lib/app-scorer/replay";
 import { createClient } from "@/lib/supabase/server";
+import type { BreakReason } from "@/lib/cricket-engine/types";
 
 type JsonObject = Record<string, unknown>;
 
@@ -581,6 +582,73 @@ export async function completeAppScorerMatch(
     );
   }
 }
+
+export async function abandonAppScorerMatch(
+  scoringSessionId: string,
+  abandonmentReason: string,
+) {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("abandon_app_scorer_match", {
+    target_scoring_session_id: scoringSessionId,
+    target_abandonment_reason: abandonmentReason,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function recordBreakStarted(input: {
+  eventId: string;
+  scoringSessionId: string;
+  inningsId: string;
+  sequenceKey: number;
+  reason: BreakReason;
+  note?: string;
+}) {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc(
+    "record_app_scorer_break_started",
+    {
+      target_event_id: input.eventId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_sequence_key: input.sequenceKey,
+      target_reason: input.reason,
+      target_note: input.note?.trim() || null,
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function recordBreakEnded(input: {
+  eventId: string;
+  scoringSessionId: string;
+  inningsId: string;
+  sequenceKey: number;
+}) {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc(
+    "record_app_scorer_break_ended",
+    {
+      target_event_id: input.eventId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_sequence_key: input.sequenceKey,
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function recordBatterEntered(input: {
   eventId: string;
   scoringSessionId: string;
