@@ -581,3 +581,34 @@ export async function completeAppScorerMatch(
     );
   }
 }
+export async function recordBatterEntered(input: {
+  eventId: string;
+  scoringSessionId: string;
+  inningsId: string;
+  sequenceKey: number;
+  batterParticipantId: string;
+  end: "STRIKER" | "NON_STRIKER";
+}): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc(
+    "record_app_scorer_batter_entered",
+    {
+      target_event_id: input.eventId,
+      target_scoring_session_id: input.scoringSessionId,
+      target_innings_id: input.inningsId,
+      target_sequence_key: input.sequenceKey,
+      target_batter_participant_id: input.batterParticipantId,
+      target_end: input.end,
+      target_occurred_at: new Date().toISOString(),
+      target_client_created_at: null,
+      target_device_id: null,
+    },
+  );
+
+  if (error) {
+    throw new Error(
+      `Unable to confirm incoming batter: ${error.message}`,
+    );
+  }
+}

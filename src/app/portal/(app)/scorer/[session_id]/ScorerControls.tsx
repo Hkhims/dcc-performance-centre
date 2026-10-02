@@ -7,6 +7,7 @@ import {
   endInningsAction,
   recordScoringDeliveryAction,
   saveDeliveryEnrichmentAction,
+  confirmIncomingBatterAction,
   undoLastBallAction,
 } from "./actions";
 import type {
@@ -414,8 +415,18 @@ export default function ScorerControls({
 }
 
   const missingBatter =
-    strikerParticipantId === null || nonStrikerParticipantId === null;
+  endRecommendation.reason !== "ALL_OUT" &&
+  (strikerParticipantId === null || nonStrikerParticipantId === null);
   const missingBowler = bowlerParticipantId === null;
+
+  const missingBatterEnd: "STRIKER" | "NON_STRIKER" | null =
+  endRecommendation.reason === "ALL_OUT"
+    ? null
+    : strikerParticipantId === null
+      ? "STRIKER"
+      : nonStrikerParticipantId === null
+        ? "NON_STRIKER"
+        : null;
 
   const excludedBatterId =
     strikerParticipantId ?? nonStrikerParticipantId;
@@ -476,10 +487,27 @@ export default function ScorerControls({
                     type="button"
                     disabled={isPending}
                     onClick={() => {
-                      setConfirmedIncomingBatterId(incomingBatterId);
-                      setMessage("Batsman confirmed.");
-                      setMessageIsError(false);
-                    }}
+                      if (!missingBatterEnd) {
+                        return;
+                      }
+
+                      startTransition(async () => {
+                        const result = await confirmIncomingBatterAction(
+                        scoringSessionId,
+                        inningsId,
+                        incomingBatterId,
+                        missingBatterEnd,
+                      );
+
+                      setMessage(result.message);
+                      setMessageIsError(!result.ok);
+
+                      if (result.ok) {
+                        setConfirmedIncomingBatterId(null);
+                        setIncomingBatterId("");
+                      }
+                    });
+                  }}
                     className="rounded-xl bg-amber-400 px-4 py-3 text-sm font-black text-black disabled:opacity-50"
                   >
                     Confirm batsman

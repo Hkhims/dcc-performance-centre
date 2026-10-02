@@ -7,6 +7,7 @@ import {
   recordDelivery,
   recordInningsEnded,
   recordOverEnded,
+  recordBatterEntered,
   undoLastBall,
 } from "@/lib/app-scorer/scoring-service";
 import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
@@ -429,6 +430,52 @@ export async function recordBatRunsAction(
   );
 }
 
+export async function confirmIncomingBatterAction(
+  scoringSessionId: string,
+  inningsId: string,
+  batterParticipantId: string,
+  end: "STRIKER" | "NON_STRIKER",
+): Promise<ScorerActionResult> {
+  try {
+    const { signedIn } = await requireSignedInUser();
+
+    if (!signedIn) {
+      return {
+        ok: false,
+        message: "You must be signed in.",
+      };
+    }
+
+    const snapshot = await getScorerSnapshot(inningsId);
+
+    if (snapshot.scoringSessionId !== scoringSessionId) {
+      return {
+        ok: false,
+        message: "This innings does not belong to the scoring session.",
+      };
+    }
+
+    await recordBatterEntered({
+      eventId: crypto.randomUUID(),
+      scoringSessionId,
+      inningsId,
+      sequenceKey: snapshot.nextSequenceKey,
+      batterParticipantId,
+      end,
+    });
+    revalidatePath(`/portal/scorer/${scoringSessionId}`);
+
+    return {
+      ok: true,
+      message: "Batsman confirmed.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
+    };
+  }
+}
 
 export async function endOverAction(
   scoringSessionId: string,

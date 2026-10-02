@@ -99,6 +99,13 @@ export type BatterReturnedEvent = {
   end: "STRIKER" | "NON_STRIKER";
 };
 
+export type BatterEnteredEvent = {
+  id: string;
+  type: "BATTER_ENTERED";
+  batterId: ParticipantId;
+  end: "STRIKER" | "NON_STRIKER";
+};
+
 export type PenaltyRunsEvent = {
   id: string;
   type: "PENALTY_RUNS";
@@ -168,6 +175,7 @@ export type CricketActionEvent =
   | OverEndedEvent
   | BatterRetiredEvent
   | BatterReturnedEvent
+  | BatterEnteredEvent
   | PenaltyRunsEvent
   | InningsEndedEvent
   | BreakStartedEvent

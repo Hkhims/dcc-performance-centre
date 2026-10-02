@@ -421,6 +421,44 @@ export function deriveInningsState(
       continue;
     }
 
+    if (event.type === "BATTER_ENTERED") {
+  const batter = getBatter(event.batterId);
+
+  if (batter.dismissed || batter.retired) {
+    continue;
+  }
+
+  if (event.end === "STRIKER") {
+    if (
+      state.strikerId !== null &&
+      state.strikerId !== event.batterId
+    ) {
+      continue;
+    }
+
+    if (state.nonStrikerId === event.batterId) {
+      state.nonStrikerId = null;
+    }
+
+    state.strikerId = event.batterId;
+  } else {
+    if (
+      state.nonStrikerId !== null &&
+      state.nonStrikerId !== event.batterId
+    ) {
+      continue;
+    }
+
+    if (state.strikerId === event.batterId) {
+      state.strikerId = null;
+    }
+
+    state.nonStrikerId = event.batterId;
+  }
+
+  continue;
+}
+
     if (event.type === "BATTER_RETURNED") {
       const batter = getBatter(event.batterId);
 

@@ -1312,6 +1312,37 @@ it("preserves strike when two runs are completed but one is called short", () =>
     expect(state.batters["reserve-batter"].retired).toBe(true);
   });
 
+  it("places a new batter at the vacant striker end", () => {
+  const events: CricketEvent[] = [
+    {
+      id: "delivery-with-wicket",
+      type: "DELIVERY",
+      strikerId: "batter-1",
+      nonStrikerId: "batter-2",
+      bowlerId: "bowler-1",
+      batRuns: 0,
+      wicket: {
+        type: "BOWLED",
+        dismissedBatterId: "batter-1",
+      },
+    },
+    {
+      id: "new-batter-entered",
+      type: "BATTER_ENTERED",
+      batterId: "batter-3",
+      end: "STRIKER",
+    },
+  ];
+
+  const state = deriveInningsState(events);
+
+  expect(state.wickets).toBe(1);
+  expect(state.strikerId).toBe("batter-3");
+  expect(state.nonStrikerId).toBe("batter-2");
+  expect(state.batters["batter-3"].dismissed).toBe(false);
+  expect(state.batters["batter-3"].retired).toBe(false);
+});
+
   it("does not allow a dismissed batter to return", () => {
     const events: CricketEvent[] = [
       {
