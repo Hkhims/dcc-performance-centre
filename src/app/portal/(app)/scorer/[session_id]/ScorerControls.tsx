@@ -771,7 +771,7 @@ export default function ScorerControls({
                 (missingBatter && !confirmedIncomingBatterId) ||
                 (missingBowler && !confirmedNextBowlerId)
               }
-              className="flex h-20 items-center justify-center rounded-2xl bg-amber-400 text-3xl font-black text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-24"
+              className="flex h-20 touch-manipulation items-center justify-center rounded-2xl bg-amber-400 text-3xl font-black text-black shadow-[0_10px_30px_rgba(251,191,36,0.08)] transition hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-24"
             >
               {isPending && pendingLabel === label
                 ? "…"
@@ -1002,7 +1002,7 @@ export default function ScorerControls({
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
           onClick={() => togglePanel("WICKET")}
-          className="rounded-xl border border-rose-400/30 bg-rose-400/[0.08] px-4 py-3 text-sm font-bold text-rose-300 disabled:opacity-40"
+          className="min-h-12 rounded-xl border border-rose-400/40 bg-rose-400/[0.10] px-4 py-3 text-sm font-black tracking-wide text-rose-200 transition hover:bg-rose-400/[0.16] disabled:opacity-40"
         >
           WICKET
         </button>
@@ -1221,10 +1221,10 @@ export default function ScorerControls({
       ) : null}
       {message && endRecommendation.reason !== "ALL_OUT" ? (
       <p
-        className={`mt-4 text-sm ${
+        className={`sticky bottom-4 z-20 mt-5 rounded-xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur ${
           messageIsError
-            ? "text-rose-300"
-            : "text-emerald-300"
+            ? "border-rose-400/30 bg-rose-950/90 text-rose-200"
+            : "border-emerald-400/30 bg-emerald-950/90 text-emerald-200"
         }`}
       >
         {message}

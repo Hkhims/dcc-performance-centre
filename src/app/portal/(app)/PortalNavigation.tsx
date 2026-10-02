@@ -18,6 +18,13 @@ export default function PortalNavigation({
 }: PortalNavigationProps) {
   const pathname = usePathname();
 
+  // Live scoring is a focused match-day workspace. The scorer page provides
+  // its own compact navigation so the full Portal chrome does not consume
+  // valuable phone-screen space during play.
+  if (pathname.startsWith("/portal/scorer/")) {
+    return null;
+  }
+
   const links = [
     { label: "Home", href: "/portal" },
     { label: "Cricket", href: "/portal/cricket" },

@@ -33,6 +33,7 @@ import CompleteMatchControl from "./CompleteMatchControl";
 import AbandonMatchControl from "./AbandonMatchControl";
 
 import BreakControl from "./BreakControl";
+import StickyScoreBar from "./StickyScoreBar";
 
 
 
@@ -232,7 +233,7 @@ export default async function ScorerPage({ params }: PageProps) {
 
 
 
-  .select("status")
+  .select("status,match_id")
 
 
 
@@ -1604,6 +1605,35 @@ if (secondInningsData) {
 
 
 
+  const [matchContextResponse, liveSideResponse] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("fixture_label,match_date,venue_name,stats_category")
+      .eq("match_id", sessionData.match_id)
+      .maybeSingle(),
+    supabase
+      .from("match_sides")
+      .select("side_id,display_name")
+      .eq("scoring_session_id", scoringSessionId),
+  ]);
+
+  if (matchContextResponse.error) {
+    throw new Error(`Unable to load match context: ${matchContextResponse.error.message}`);
+  }
+
+  if (liveSideResponse.error) {
+    throw new Error(`Unable to load match sides: ${liveSideResponse.error.message}`);
+  }
+
+  const liveSides = liveSideResponse.data ?? [];
+  const battingSideName =
+    liveSides.find((side) => side.side_id === innings.batting_side_id)?.display_name ??
+    "Batting side";
+  const bowlingSideName =
+    liveSides.find((side) => side.side_id === innings.bowling_side_id)?.display_name ??
+    "Bowling side";
+  const matchContext = matchContextResponse.data;
+
   const { data: externalSideData, error: externalSideError } =
 
 
@@ -1899,289 +1929,193 @@ if (secondInningsData) {
   };
 
 
+  const strikerState = snapshot.strikerParticipantId
+    ? snapshot.state.batters[snapshot.strikerParticipantId]
+    : null;
+  const nonStrikerState = snapshot.nonStrikerParticipantId
+    ? snapshot.state.batters[snapshot.nonStrikerParticipantId]
+    : null;
+  const bowlerState = snapshot.bowlerParticipantId
+    ? snapshot.state.bowlers[snapshot.bowlerParticipantId]
+    : null;
+  const currentRunRate = snapshot.legalBalls > 0
+    ? ((snapshot.runs * 6) / snapshot.legalBalls).toFixed(2)
+    : "0.00";
+  const bowlerOvers = bowlerState
+    ? formatOvers(Math.floor(bowlerState.legalBalls / 6), bowlerState.legalBalls % 6)
+    : "0.0";
+  const matchMeta = [
+    matchContext?.stats_category,
+    matchContext?.match_date
+      ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(
+          new Date(`${matchContext.match_date}T12:00:00`),
+        )
+      : null,
+    matchContext?.venue_name,
+  ].filter(Boolean).join(" · ");
+
+
 
 
 
 
 
   return (
-
-
-
-    <main className="min-h-screen bg-[#05070d] px-4 py-8 text-white sm:px-6 sm:py-12">
-
-
-
+    <main className="min-h-screen bg-[#05070d] px-3 py-3 text-white sm:px-6 sm:py-8">
       <div className="mx-auto w-full max-w-5xl">
-
-
-
-        <header className="border-b border-white/10 pb-6">
-
-
-
-          <Link
-
-
-
-            href="/portal/team-admin"
-
-
-
-            className="text-sm font-medium text-zinc-400 transition hover:text-amber-400"
-
-
-
-          >
-
-
-
-            ← Back to Team Admin
-
-
-
-          </Link>
-
-
-
-
-
-
-
-          <p className="mt-6 text-sm font-semibold uppercase tracking-[0.22em] text-amber-400">
-
-
-
-            DCC App Scorer
-
-
-
-          </p>
-
-
-
-
-
-
-
-          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-
-
-
-            Live Scoring
-
-
-
-          </h1>
-
-
-
+        <header className="mb-4 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <Link
+              href="/portal/team-admin"
+              className="text-sm font-medium text-zinc-400 transition hover:text-amber-400"
+            >
+              ← Team Admin
+            </Link>
+            <p className="mt-2 text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+              DCC App Scorer · Live
+            </p>
+          </div>
+          <div className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.07] px-3 py-1.5 text-xs font-bold text-emerald-300">
+            ● Scoring
+          </div>
         </header>
 
+        <StickyScoreBar
+          battingSideName={battingSideName}
+          score={`${snapshot.runs}/${snapshot.wickets}`}
+          overs={formatOvers(snapshot.completedOvers, snapshot.legalBallsInCurrentOver)}
+        />
 
-
-
-
-
-
-        <section className="py-8">
-
-
-
-          <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-6 sm:p-8">
-
-
-
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-
-
-
+        <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] shadow-2xl shadow-black/20">
+          <div className="border-b border-white/10 px-4 py-4 sm:px-7 sm:py-5">
+            <div>
               <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Match</p>
+                <h1 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">
+                  {battingSideName} <span className="text-zinc-600">vs</span> {bowlingSideName}
+                </h1>
+                {matchMeta ? <p className="mt-1 text-sm text-zinc-500">{matchMeta}</p> : null}
+              </div>
+            </div>
+          </div>
 
-
-
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500">
-
-
-
-                  Score
-
-
-
+          <div className="px-4 py-5 sm:px-7 sm:py-7">
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">
+                  {battingSideName}
                 </p>
+                <div id="scorer-hero-score" className="mt-1 flex items-end gap-4">
+                  <p className="text-6xl font-black tracking-[-0.06em] sm:text-7xl">
+                    {snapshot.runs}/{snapshot.wickets}
+                  </p>
+                  <p className="mb-2 text-lg font-bold text-zinc-400">
+                    {formatOvers(snapshot.completedOvers, snapshot.legalBallsInCurrentOver)} ov
+                  </p>
+                </div>
 
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-zinc-300">
+                    CRR {currentRunRate}
+                  </span>
+                  {snapshot.state.chase ? (
+                    <>
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-zinc-300">
+                        Target {snapshot.state.chase.target}
+                      </span>
+                      <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.06] px-3 py-1.5 text-amber-200">
+                        Need {snapshot.state.chase.runsRequired}
+                        {snapshot.state.chase.ballsRemaining !== null
+                          ? ` from ${snapshot.state.chase.ballsRemaining}`
+                          : ""}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
 
-
-
-
-
-
-                <p className="mt-2 text-6xl font-black tracking-tight sm:text-7xl">
-
-
-
-                  {snapshot.runs}/{snapshot.wickets}
-
-
-
-                </p>
-
-
-
-
-
-
-
-                <p className="mt-2 text-lg font-semibold text-zinc-400">
-
-
-
-                  {formatOvers(
-
-
-
-                    snapshot.completedOvers,
-
-
-
-                    snapshot.legalBallsInCurrentOver,
-
-
-
-                  )}{" "}
-
-
-
-                  overs
-
-
-
-                </p>
-
-
-
+                <div className="mt-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-600">This over</p>
+                  <div className="mt-2 flex min-h-10 flex-wrap items-center gap-2">
+                    {snapshot.currentOver.length > 0 ? snapshot.currentOver.map((delivery, index) => (
+                      <span
+                        key={`${delivery}-${index}`}
+                        className={`flex h-9 min-w-9 items-center justify-center rounded-full border px-2 text-xs font-black ${
+                          delivery === "W"
+                            ? "border-rose-400/30 bg-rose-400/[0.10] text-rose-200"
+                            : "border-white/10 bg-white/[0.05] text-zinc-200"
+                        }`}
+                      >
+                        {delivery}
+                      </span>
+                    )) : (
+                      <span className="text-sm text-zinc-600">No deliveries yet</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-
-
-
-
-
-
-              <div className="grid gap-3 text-sm sm:min-w-80">
-
-
-
-                <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3">
-
-
-
-                  <span className="text-zinc-500">Striker · </span>
-
-
-
-                  <span className="font-semibold text-amber-300">
-
-
-
-                    {snapshot.state.endRecommendation.reason === "ALL_OUT" &&
-
-
-
-                    snapshot.strikerParticipantId === null
-
-
-
-                      ? "Innings complete"
-
-
-
-                      : participantName(snapshot.strikerParticipantId)}
-
-
-
-                  </span>
-
-
-
+              <div className="grid gap-2 sm:gap-3">
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.055] p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-300">On strike</p>
+                      <p className="mt-1 truncate text-lg font-black">
+                        {snapshot.state.endRecommendation.reason === "ALL_OUT" && snapshot.strikerParticipantId === null
+                          ? "Innings complete"
+                          : participantName(snapshot.strikerParticipantId)}
+                        {snapshot.strikerParticipantId ? <span className="text-amber-300"> *</span> : null}
+                      </p>
+                    </div>
+                    {strikerState ? (
+                      <p className="shrink-0 text-lg font-black">
+                        {strikerState.runs} <span className="text-sm font-semibold text-zinc-500">({strikerState.balls})</span>
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-
-
-
-
-
-
-                <div className="rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3">
-
-
-
-                  <span className="text-zinc-500">Non-striker · </span>
-
-
-
-                  <span className="font-semibold">
-
-
-
-                    {participantName(snapshot.nonStrikerParticipantId)}
-
-
-
-                  </span>
-
-
-
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-600">Non-striker</p>
+                      <p className="mt-1 truncate font-bold">{participantName(snapshot.nonStrikerParticipantId)}</p>
+                    </div>
+                    {nonStrikerState ? (
+                      <p className="shrink-0 font-black">
+                        {nonStrikerState.runs} <span className="text-xs font-semibold text-zinc-500">({nonStrikerState.balls})</span>
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-
-
-
-
-
-
-                <div className="rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3">
-
-
-
-                  <span className="text-zinc-500">Bowler · </span>
-
-
-
-                  <span className="font-semibold">
-
-
-
-                    {participantName(snapshot.bowlerParticipantId)}
-
-
-
-                  </span>
-
-
-
+                <div className="rounded-2xl border border-sky-400/15 bg-sky-400/[0.035] p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-300">Bowling</p>
+                      <p className="mt-1 truncate font-bold">{participantName(snapshot.bowlerParticipantId)}</p>
+                    </div>
+                    {bowlerState ? (
+                      <p className="shrink-0 text-sm font-black text-zinc-300">
+                        {bowlerOvers} · {bowlerState.runsConceded} · {bowlerState.wickets}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-
-
-
               </div>
-
-
-
             </div>
 
-
-
-
-
-
-
-            <div className="mt-8">
-              <BreakControl
-                scoringSessionId={scoringSessionId}
-                inningsId={snapshot.inningsId}
-                activeBreak={snapshot.state.break}
-              />
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-600">Match controls</p>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+                <BreakControl
+                  scoringSessionId={scoringSessionId}
+                  inningsId={snapshot.inningsId}
+                  activeBreak={snapshot.state.break}
+                />
+                {sessionStatus === "InProgress" && !snapshot.state.break.active ? (
+                  <AbandonMatchControl scoringSessionId={scoringSessionId} />
+                ) : null}
+              </div>
             </div>
 
             {!snapshot.state.break.active ? (
@@ -2191,91 +2125,21 @@ if (secondInningsData) {
                 strikerParticipantId={snapshot.strikerParticipantId}
                 nonStrikerParticipantId={snapshot.nonStrikerParticipantId}
                 bowlerParticipantId={snapshot.bowlerParticipantId}
-                previousOverBowlerParticipantId={
-                  snapshot.previousOverBowlerParticipantId
-                }
+                previousOverBowlerParticipantId={snapshot.previousOverBowlerParticipantId}
                 battingParticipants={battingParticipants}
                 bowlingParticipants={bowlingParticipants}
-                canAddBattingOppositionPlayer={
-                  externalSideId === innings.batting_side_id
-                }
-                canAddBowlingOppositionPlayer={
-                  externalSideId === innings.bowling_side_id
-                }
+                canAddBattingOppositionPlayer={externalSideId === innings.batting_side_id}
+                canAddBowlingOppositionPlayer={externalSideId === innings.bowling_side_id}
                 overReadyToEnd={snapshot.overReadyToEnd}
                 endRecommendation={snapshot.state.endRecommendation}
                 canUndo={snapshot.eventCount > 0}
               />
             ) : null}
-
-
-
           </div>
-
-
-
-
-
-
-
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-600">
-
-
-
-            <span>Ledger events: {snapshot.eventCount}</span>
-
-
-
-            <span>Next sequence: {snapshot.nextSequenceKey}</span>
-
-
-
-            <span>Legal balls: {snapshot.legalBalls}</span>
-
-
-
-            {snapshot.overReadyToEnd ? (
-
-
-
-              <span className="text-sky-400">Over ready to end</span>
-
-
-
-            ) : null}
-
-
-
-          </div>
-
-
-
         </section>
 
 
-
       </div>
-
-
-
-      {sessionStatus === "InProgress" ? (
-
-
-
-  <AbandonMatchControl scoringSessionId={scoringSessionId} />
-
-
-
-) : null}
-
-
-
     </main>
-
-
-
   );
-
-
-
 }

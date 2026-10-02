@@ -121,7 +121,7 @@ export default function BreakControl({
           setMessage(null);
           setShowForm(true);
         }}
-        className="rounded-xl border border-amber-400/30 px-4 py-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/10"
+        className="w-full rounded-xl border border-amber-400/25 bg-amber-400/[0.04] px-4 py-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/10 sm:w-auto"
       >
         Break
       </button>

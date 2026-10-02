@@ -10,7 +10,9 @@ import {
   hasEffectiveScoringActionEvents,
   isPersistedScoringEventRow,
   type PersistedScoringEventRow,
+  persistedRowToCricketEvent,
 } from "@/lib/app-scorer/replay";
+import { resolveEffectiveEvents } from "@/lib/cricket-engine/engine";
 import { createClient } from "@/lib/supabase/server";
 import type { BreakReason } from "@/lib/cricket-engine/types";
 
@@ -66,6 +68,7 @@ export type ScorerSnapshot = {
   previousOverBowlerParticipantId: string | null;
   nextSequenceKey: number;
   eventCount: number;
+  currentOver: string[];
   state: InningsState;
 };
 
@@ -311,6 +314,44 @@ export async function derivePersistedInningsState(
   return state;
 }
 
+function currentOverTokens(rows: PersistedScoringEventRow[]): string[] {
+  const events = resolveEffectiveEvents(
+    [...rows]
+      .sort((a, b) => a.sequence_key - b.sequence_key)
+      .map(persistedRowToCricketEvent),
+  );
+
+  const lastOverEnd = events.reduce(
+    (lastIndex, event, index) =>
+      event.type === "OVER_ENDED" ? index : lastIndex,
+    -1,
+  );
+
+  return events.slice(lastOverEnd + 1).flatMap((event) => {
+    if (event.type !== "DELIVERY") return [];
+
+    if (event.wicket) return ["W"];
+
+    const wides = event.extras?.wides ?? 0;
+    if (wides > 0) return [`${wides}Wd`];
+
+    const noBalls = event.extras?.noBalls ?? 0;
+    if (noBalls > 0) {
+      const total = event.batRuns + noBalls +
+        (event.extras?.byes ?? 0) + (event.extras?.legByes ?? 0);
+      return [`${total}Nb`];
+    }
+
+    const byes = event.extras?.byes ?? 0;
+    if (byes > 0) return [`${byes}B`];
+
+    const legByes = event.extras?.legByes ?? 0;
+    if (legByes > 0) return [`${legByes}Lb`];
+
+    return [event.batRuns === 0 ? "•" : String(event.batRuns)];
+  });
+}
+
 export async function getScorerSnapshot(
   inningsId: string,
 ): Promise<ScorerSnapshot> {
@@ -349,6 +390,7 @@ export async function getScorerSnapshot(
       state.previousOverBowlerId,
     nextSequenceKey,
     eventCount: rows.length,
+    currentOver: currentOverTokens(rows),
     state,
   };
 }
