@@ -418,6 +418,10 @@ export default function ScorerControls({
     strikerParticipantId === null || nonStrikerParticipantId === null;
   const missingBowler = bowlerParticipantId === null;
 
+  const inningsReadyToEnd =
+  endRecommendation.recommended &&
+  endRecommendation.reason !== null;
+
   const missingBatterEnd: "STRIKER" | "NON_STRIKER" | null =
   endRecommendation.reason === "ALL_OUT"
     ? null
@@ -767,6 +771,7 @@ export default function ScorerControls({
               }
               disabled={
                 isPending ||
+                inningsReadyToEnd ||
                 overReadyToEnd ||
                 (missingBatter && !confirmedIncomingBatterId) ||
                 (missingBowler && !confirmedNextBowlerId)
@@ -788,6 +793,7 @@ export default function ScorerControls({
           label="Wide"
           active={extraPanel === "WIDE"}
           disabled={isPending ||
+            inningsReadyToEnd ||
             overReadyToEnd ||
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
@@ -797,6 +803,7 @@ export default function ScorerControls({
           label="No Ball"
           active={extraPanel === "NO_BALL"}
           disabled={isPending ||
+            inningsReadyToEnd ||
             overReadyToEnd ||
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
@@ -806,6 +813,7 @@ export default function ScorerControls({
           label="Bye"
           active={extraPanel === "BYE"}
           disabled={isPending ||
+            inningsReadyToEnd ||
             overReadyToEnd ||
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
@@ -815,6 +823,7 @@ export default function ScorerControls({
           label="Leg Bye"
           active={extraPanel === "LEG_BYE"}
           disabled={isPending ||
+            inningsReadyToEnd ||
             overReadyToEnd ||
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
@@ -828,7 +837,7 @@ export default function ScorerControls({
         >
           <ChoiceButton
             label="1 wide"
-            disabled={isPending}
+            disabled={isPending || inningsReadyToEnd}
             onClick={() =>
               record("WIDE_1", {
                 batRuns: 0,
@@ -845,7 +854,7 @@ export default function ScorerControls({
                 label={`${totalWides} wides · ${completedRuns} run${
                   completedRuns === 1 ? "" : "s"
                 }`}
-                disabled={isPending}
+                disabled={isPending || inningsReadyToEnd}
                 onClick={() =>
                   record(
                     `WIDE_${totalWides}_RUN_${completedRuns}`,
@@ -861,7 +870,7 @@ export default function ScorerControls({
           })}
           <ChoiceButton
             label="5 wides · boundary"
-            disabled={isPending}
+            disabled={isPending || inningsReadyToEnd}
             onClick={() =>
               record("WIDE_5_BOUNDARY", {
                 batRuns: 0,
@@ -884,19 +893,19 @@ export default function ScorerControls({
             <ModeButton
               label="Off Bat"
               active={noBallMode === "BAT"}
-              disabled={isPending}
+              disabled={isPending || inningsReadyToEnd}
               onClick={() => setNoBallMode("BAT")}
             />
             <ModeButton
               label="Byes"
               active={noBallMode === "BYE"}
-              disabled={isPending}
+              disabled={isPending || inningsReadyToEnd}
               onClick={() => setNoBallMode("BYE")}
             />
             <ModeButton
               label="Leg Byes"
               active={noBallMode === "LEG_BYE"}
-              disabled={isPending}
+              disabled={isPending || inningsReadyToEnd}
               onClick={() => setNoBallMode("LEG_BYE")}
             />
           </div>
@@ -910,7 +919,7 @@ export default function ScorerControls({
                       ? "No ball only"
                       : `NB + ${batRuns} off bat`
                   }
-                  disabled={isPending}
+                  disabled={isPending || inningsReadyToEnd}
                   onClick={() =>
                     record(`NO_BALL_BAT_${batRuns}`, {
                       batRuns,
@@ -925,7 +934,7 @@ export default function ScorerControls({
             <NoBallRunningExtras
               kind="BYE"
               title="Bye"
-              disabled={isPending}
+              disabled={isPending || inningsReadyToEnd}
               record={record}
             />
           ) : null}
@@ -933,7 +942,7 @@ export default function ScorerControls({
             <NoBallRunningExtras
               kind="LEG_BYE"
               title="Leg Bye"
-              disabled={isPending}
+              disabled={isPending || inningsReadyToEnd}
               record={record}
             />
           ) : null}
@@ -943,7 +952,7 @@ export default function ScorerControls({
         <RunningExtraPanel
           title="Bye"
           kind="BYE"
-          disabled={isPending}
+          disabled={isPending || inningsReadyToEnd}
           record={record}
         />
       ) : null}
@@ -951,7 +960,7 @@ export default function ScorerControls({
         <RunningExtraPanel
           title="Leg Bye"
           kind="LEG_BYE"
-          disabled={isPending}
+          disabled={isPending || inningsReadyToEnd}
           record={record}
         />
       ) : null}
@@ -968,6 +977,9 @@ export default function ScorerControls({
         : endRecommendation.reason === "TARGET_REACHED"
           ? "The target has been reached."
           : "The scheduled ball limit has been reached."}
+    </p>
+    <p className="mt-2 text-sm font-semibold text-emerald-200">
+      Scoring is locked. End the innings or undo the previous delivery to continue.
     </p>
 
     <button
@@ -998,6 +1010,7 @@ export default function ScorerControls({
         <button
           type="button"
           disabled={isPending ||
+            inningsReadyToEnd ||
             overReadyToEnd ||
             (missingBatter && !confirmedIncomingBatterId) ||
             (missingBowler && !confirmedNextBowlerId)}
@@ -1212,7 +1225,7 @@ export default function ScorerControls({
           <button
             type="button"
             onClick={recordWicket}
-            disabled={isPending}
+            disabled={isPending || inningsReadyToEnd}
             className="mt-4 w-full rounded-xl bg-rose-500 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
           >
             Record Wicket

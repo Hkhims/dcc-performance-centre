@@ -186,4 +186,40 @@ describe("App Scorer persisted-event replay", () => {
   expect(state.nonStrikerId).toBeNull();
   expect(state.currentBowlerId).toBeNull();
 });
+it("does not treat a playing-conditions change as a scoring action", () => {
+  const eventId =
+    "33333333-3333-4333-8333-333333333333";
+
+  const rows: PersistedScoringEventRow[] = [
+    {
+      event_id: eventId,
+      sequence_key: 1,
+      event_type: "PLAYING_CONDITIONS_CHANGED",
+      payload: {
+        id: eventId,
+        type: "PLAYING_CONDITIONS_CHANGED",
+        scheduledLegalBalls: 150,
+      },
+    },
+  ];
+
+  expect(
+    hasEffectiveScoringActionEvents(rows),
+  ).toBe(false);
+
+  const state = derivePersistedEventRowsState(
+    rows,
+    {
+      scheduledBalls: 150,
+      targetRuns: null,
+    },
+  );
+
+  expect(state.runs).toBe(0);
+  expect(state.wickets).toBe(0);
+  expect(state.legalBalls).toBe(0);
+  expect(
+    state.playingConditions.scheduledLegalBalls,
+  ).toBe(150);
+});
 });

@@ -106,7 +106,12 @@ export function hasEffectiveScoringActionEvents(
     persistedRowToCricketEvent,
   );
 
-  return resolveEffectiveEvents(events).length > 0;
+  return resolveEffectiveEvents(events).some(
+  (event) =>
+    event.type === "DELIVERY" ||
+    event.type === "OVER_ENDED" ||
+    event.type === "BATTER_ENTERED",
+);
 }
 
 export function derivePersistedEventRowsState(

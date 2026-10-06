@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import NotificationBell, {
+  type NotificationBellItem,
+} from "./NotificationBell";
 
 type PortalNavigationProps = {
   displayName: string | null;
   hasPlayerProfile: boolean;
   isSuperAdmin: boolean;
   hasTeamAdminAccess: boolean;
+  notifications: NotificationBellItem[];
+  unreadNotificationCount: number;
 };
 
 export default function PortalNavigation({
@@ -15,6 +20,8 @@ export default function PortalNavigation({
   hasPlayerProfile,
   isSuperAdmin,
   hasTeamAdminAccess,
+  notifications,
+  unreadNotificationCount,
 }: PortalNavigationProps) {
   const pathname = usePathname();
 
@@ -48,8 +55,17 @@ export default function PortalNavigation({
             </p>
           </div>
 
-          <div className="text-sm text-zinc-400">
-            {displayName ? `Hello, ${displayName}` : "Welcome"}
+          <div className="flex items-center gap-3">
+            <div className="text-right text-sm text-zinc-400">
+              {displayName
+                ? `Hello, ${displayName}`
+                : "Welcome"}
+            </div>
+
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadNotificationCount}
+            />
           </div>
         </div>
 
@@ -78,62 +94,65 @@ export default function PortalNavigation({
         </nav>
 
         {(isSuperAdmin || hasTeamAdminAccess) && (
-  <nav
-    aria-label="DCC administration navigation"
-    className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4"
-  >
-    <span className="mr-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-      Administration
-    </span>
+          <nav
+            aria-label="DCC administration navigation"
+            className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4"
+          >
+            <span className="mr-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Administration
+            </span>
 
-    <Link
-  href="/portal/team-admin"
-  aria-current={
-    pathname === "/portal/team-admin" ? "page" : undefined
-  }
-  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-    pathname === "/portal/team-admin"
-      ? "bg-amber-400 text-black"
-      : "text-amber-300 hover:bg-white/10"
-  }`}
->
-  Team Admin
-</Link>
-<Link
-  href="/portal/imports"
-  aria-current={
-    pathname.startsWith("/portal/imports")
-      ? "page"
-      : undefined
-  }
-      className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-        pathname.startsWith("/portal/imports")
-          ? "bg-amber-400 text-black"
-          : "text-amber-300 hover:bg-white/10"
-      }`}
-    >
-      Match Reviews
-    </Link>
+            <Link
+              href="/portal/team-admin"
+              aria-current={
+                pathname === "/portal/team-admin"
+                  ? "page"
+                  : undefined
+              }
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                pathname === "/portal/team-admin"
+                  ? "bg-amber-400 text-black"
+                  : "text-amber-300 hover:bg-white/10"
+              }`}
+            >
+              Team Admin
+            </Link>
 
-    {isSuperAdmin && (
-      <Link
-        href="/portal/player-claims"
-        aria-current={
-          pathname === "/portal/player-claims"
-            ? "page"
-            : undefined
-        }
-        className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-          pathname === "/portal/player-claims"
-            ? "bg-amber-400 text-black"
-            : "text-amber-300 hover:bg-white/10"
-        }`}
-      >
-        Player Claims
-      </Link>
-    )}
-  </nav>
-)}
+            <Link
+              href="/portal/imports"
+              aria-current={
+                pathname.startsWith("/portal/imports")
+                  ? "page"
+                  : undefined
+              }
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                pathname.startsWith("/portal/imports")
+                  ? "bg-amber-400 text-black"
+                  : "text-amber-300 hover:bg-white/10"
+              }`}
+            >
+              Match Reviews
+            </Link>
+
+            {isSuperAdmin && (
+              <Link
+                href="/portal/player-claims"
+                aria-current={
+                  pathname === "/portal/player-claims"
+                    ? "page"
+                    : undefined
+                }
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  pathname === "/portal/player-claims"
+                    ? "bg-amber-400 text-black"
+                    : "text-amber-300 hover:bg-white/10"
+                }`}
+              >
+                Player Claims
+              </Link>
+            )}
+          </nav>
+        )}
       </div>
     </header>
   );

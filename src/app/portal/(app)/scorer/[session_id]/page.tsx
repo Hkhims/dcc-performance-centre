@@ -1,44 +1,14 @@
 import Link from "next/link";
-
-
-
 import { redirect } from "next/navigation";
-
-
-
 import { getScorerSnapshot } from "@/lib/app-scorer/scoring-service";
-
-
-
 import { deriveMatchState } from "@/lib/cricket-engine/match-engine";
-
-
-
 import { createClient } from "@/lib/supabase/server";
-
-
-
 import ScorerControls from "./ScorerControls";
-
-
-
 import InningsBreakControls from "./InningsBreakControls";
-
-
-
 import CompleteMatchControl from "./CompleteMatchControl";
-
-
-
-import AbandonMatchControl from "./AbandonMatchControl";
-
+import MatchOptionsControl from "./MatchOptionsControl";
 import BreakControl from "./BreakControl";
 import StickyScoreBar from "./StickyScoreBar";
-
-
-
-
-
 
 
 type PageProps = {
@@ -2113,7 +2083,13 @@ if (secondInningsData) {
                   activeBreak={snapshot.state.break}
                 />
                 {sessionStatus === "InProgress" && !snapshot.state.break.active ? (
-                  <AbandonMatchControl scoringSessionId={scoringSessionId} />
+                  <MatchOptionsControl
+                    scoringSessionId={scoringSessionId}
+                    inningsId={snapshot.inningsId}
+                    scheduledLegalBalls={
+                      snapshot.state.playingConditions.scheduledLegalBalls
+                    }
+                  />
                 ) : null}
               </div>
             </div>
